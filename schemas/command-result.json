@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "agentfoundry.command-result/v1"
+    },
+    "command": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "blocked"
+      ]
+    },
+    "code": {
+      "type": "string"
+    },
+    "mutation": {
+      "enum": [
+        "none",
+        "staged_only",
+        "applied",
+        "rolled_back",
+        "partial_recovery_required"
+      ]
+    },
+    "data": {
+      "type": "object"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "next_action": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "next_action"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "command",
+    "status",
+    "code",
+    "mutation",
+    "data",
+    "warnings",
+    "errors"
+  ],
+  "additionalProperties": false
+}

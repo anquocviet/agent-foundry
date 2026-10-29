@@ -1,0 +1,22 @@
+[package]
+name = "agentfoundry"
+version = "0.1.0-dev.1"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+build = "build.rs"
+
+[features]
+fault-injection = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+fs2 = "0.4"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"

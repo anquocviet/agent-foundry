@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "agentfoundry.stored-plan/v1"
+    },
+    "root": {
+      "type": "string"
+    },
+    "root_identity": {"type": "string", "minLength": 1},
+    "payload_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "choices": {
+      "type": "object",
+      "properties": {
+        "merge": {
+          "type": "boolean"
+        },
+        "replace": {
+          "type": "boolean"
+        },
+        "refresh": {
+          "type": "boolean"
+        },
+        "wisdom": {
+          "type": "boolean"
+        },
+        "claude": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "merge",
+        "replace",
+        "refresh",
+        "wisdom",
+        "claude"
+      ],
+      "additionalProperties": false
+    },
+    "operations": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 511
+          }
+        },
+        "required": [
+          "target",
+          "before",
+          "after",
+          "mode"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "root",
+    "root_identity",
+    "payload_digest",
+    "choices",
+    "operations"
+  ],
+  "additionalProperties": false
+}

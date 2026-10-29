@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "agentfoundry.config/v1"
+    },
+    "adapters": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "agents-md",
+          "claude"
+        ]
+      },
+      "uniqueItems": true,
+      "contains": {
+        "const": "agents-md"
+      },
+      "maxItems": 2
+    },
+    "addons": {
+      "type": "array",
+      "items": {
+        "const": "engineering-wisdom"
+      },
+      "uniqueItems": true,
+      "maxItems": 1
+    },
+    "paths": {
+      "type": "object",
+      "properties": {
+        "docs": {
+          "const": "docs/agentfoundry"
+        },
+        "skills": {
+          "const": ".agents/skills"
+        }
+      },
+      "required": [
+        "docs",
+        "skills"
+      ],
+      "additionalProperties": false
+    },
+    "updates": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "const": "stable"
+        },
+        "automatic": {
+          "const": false
+        }
+      },
+      "required": [
+        "channel",
+        "automatic"
+      ],
+      "additionalProperties": false
+    },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "const": false
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema",
+    "adapters",
+    "addons",
+    "paths",
+    "updates",
+    "telemetry"
+  ],
+  "additionalProperties": false
+}

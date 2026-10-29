@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentfoundry.plan/v1",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "agentfoundry.plan/v1"
+    },
+    "root": {
+      "type": "string"
+    },
+    "root_identity": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "snapshot": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema": {
+              "const": "agentfoundry.snapshot/v1"
+            },
+            "root_identity": {
+              "type": "string",
+              "minLength": 1
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "config_digest": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "state_digest": {
+              "type": ["string", "null"],
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "entries": {
+              "type": "array",
+              "maxItems": 10000,
+              "allOf": [
+                {"contains": {"properties": {"path": {"const": ".agentfoundry/config.json"}}, "required": ["path"]}},
+                {"contains": {"properties": {"path": {"const": ".agentfoundry/state/manifest.json"}}, "required": ["path"]}}
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "presence": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "absent"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "file"
+                          },
+                          "digest": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                          },
+                          "mode": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 511
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "digest",
+                          "mode"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "presence"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "schema",
+            "root_identity",
+            "generation",
+            "config_digest",
+            "state_digest",
+            "entries"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "payload_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^(?:[0-9a-fA-F]{2})*$",
+            "maxLength": 268435456
+          },
+          "after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^(?:[0-9a-fA-F]{2})*$",
+            "maxLength": 268435456
+          },
+          "mode": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 511
+          }
+        },
+        "required": [
+          "target",
+          "before",
+          "after",
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 10000
+    },
+    "choices": {
+      "type": "object",
+      "properties": {
+        "merge": {
+          "type": "boolean"
+        },
+        "replace": {
+          "type": "boolean"
+        },
+        "refresh": {
+          "type": "boolean"
+        },
+        "wisdom": {
+          "type": "boolean"
+        },
+        "claude": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "merge",
+        "replace",
+        "refresh",
+        "wisdom",
+        "claude"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema",
+    "root",
+    "root_identity",
+    "snapshot",
+    "payload_digest",
+    "operations",
+    "choices"
+  ],
+  "additionalProperties": false
+}

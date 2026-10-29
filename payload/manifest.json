@@ -1,0 +1,266 @@
+{
+  "schema": "agentfoundry.distribution/v1",
+  "entries": [
+    {
+      "logical_id": ".agents/skills/audit-onboarding-proposal/SKILL.md",
+      "source": "payload/core/.agents/skills/agentfoundry-audit/SKILL.md",
+      "target": ".agents/skills/agentfoundry-audit/SKILL.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "9fb4899afe1c75c518eda3a02a3b9a068582bdb712a9ea58919d88a862fa8ca4"
+    },
+    {
+      "logical_id": ".agents/skills/audit-onboarding-proposal/agents/openai.yaml",
+      "source": "payload/core/.agents/skills/agentfoundry-audit/agents/openai.yaml",
+      "target": ".agents/skills/agentfoundry-audit/agents/openai.yaml",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "d27a20d778b8dee29b2ffd6ff5a7908fc044c12463598fe2d6d70afe9a0a5905"
+    },
+    {
+      "logical_id": ".agents/skills/audit-onboarding-proposal/scripts/validate_evidence_capsule.py",
+      "source": "payload/core/.agents/skills/agentfoundry-audit/scripts/validate_evidence_capsule.py",
+      "target": ".agents/skills/agentfoundry-audit/scripts/validate_evidence_capsule.py",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "df0633a92d59b867c17be38e45e88a868d07b50004683771899608b1b20428f5"
+    },
+    {
+      "logical_id": ".agents/skills/encode-invariant/SKILL.md",
+      "source": "payload/core/.agents/skills/agentfoundry-encode-invariant/SKILL.md",
+      "target": ".agents/skills/agentfoundry-encode-invariant/SKILL.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "1f8af657da6d8df41dfd663dfe9b1eed60c73d695e8e8ddb83e52e3eea1107eb"
+    },
+    {
+      "logical_id": ".agents/skills/encode-invariant/agents/openai.yaml",
+      "source": "payload/core/.agents/skills/agentfoundry-encode-invariant/agents/openai.yaml",
+      "target": ".agents/skills/agentfoundry-encode-invariant/agents/openai.yaml",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "c9e3750cb5814a5a1b5239b2c67b4f687396e7d53cfe17b12f5c6dd3d335c0ac"
+    },
+    {
+      "logical_id": ".agents/skills/improve-harness/SKILL.md",
+      "source": "payload/core/.agents/skills/agentfoundry-improve/SKILL.md",
+      "target": ".agents/skills/agentfoundry-improve/SKILL.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "e6a8e7c4d8fca978933deae8baf938c225c41b7a8f1d097d06e8c2aef7faa0ce"
+    },
+    {
+      "logical_id": ".agents/skills/improve-harness/agents/openai.yaml",
+      "source": "payload/core/.agents/skills/agentfoundry-improve/agents/openai.yaml",
+      "target": ".agents/skills/agentfoundry-improve/agents/openai.yaml",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "af4dd7de07c4deb2fb6e20f58ab5d17fb016e16a2baded212bd0992ec068d5b6"
+    },
+    {
+      "logical_id": ".agents/skills/onboard-repository/SKILL.md",
+      "source": "payload/core/.agents/skills/agentfoundry-onboard/SKILL.md",
+      "target": ".agents/skills/agentfoundry-onboard/SKILL.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "5b47b4c06307e1f32758adae103bd397c33e916ab62c168d3ed124923d22a83a"
+    },
+    {
+      "logical_id": ".agents/skills/onboard-repository/agents/openai.yaml",
+      "source": "payload/core/.agents/skills/agentfoundry-onboard/agents/openai.yaml",
+      "target": ".agents/skills/agentfoundry-onboard/agents/openai.yaml",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "03fe345cb49ac027ba7895072bb5960b48c7da76be70c92b6a450c9390309570"
+    },
+    {
+      "logical_id": ".agents/skills/onboard-repository/references/evidence-capsule-v1.md",
+      "source": "payload/core/.agents/skills/agentfoundry-onboard/references/evidence-capsule-v1.md",
+      "target": ".agents/skills/agentfoundry-onboard/references/evidence-capsule-v1.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "bd945c246283201d556111fce6bd8ecdc506d9eb96e194cc5e2ec79f309661d3"
+    },
+    {
+      "logical_id": ".agents/skills/onboard-repository/references/evidence-capsule-v2.md",
+      "source": "payload/core/.agents/skills/agentfoundry-onboard/references/evidence-capsule-v2.md",
+      "target": ".agents/skills/agentfoundry-onboard/references/evidence-capsule-v2.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "18b6830d72421c2e684fd70fbcdd212f1cbcdf1ed3bf6b4a1b2f5e93cbfdc5bd"
+    },
+    {
+      "logical_id": ".agents/skills/onboard-repository/scripts/emit_evidence_bundle.py",
+      "source": "payload/core/.agents/skills/agentfoundry-onboard/scripts/emit_evidence_bundle.py",
+      "target": ".agents/skills/agentfoundry-onboard/scripts/emit_evidence_bundle.py",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "97fb7edea7a00a66f4b60f6d25ea81fc283d7b0f4b79ad3286d5a5adb5841d77"
+    },
+    {
+      "logical_id": ".agents/skills/onboard-repository/scripts/render_patch.py",
+      "source": "payload/core/.agents/skills/agentfoundry-onboard/scripts/render_patch.py",
+      "target": ".agents/skills/agentfoundry-onboard/scripts/render_patch.py",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "5ac6be1d92d5ec9b126b347c11257c5933b60f73edc1d27daabf7f2259b87aea"
+    },
+    {
+      "logical_id": "AGENTS.md",
+      "source": "payload/core/AGENTS.md",
+      "target": "AGENTS.md",
+      "ownership": "managed_block",
+      "mode": 420,
+      "sha256": "5cc44130e4ec7c789e6bf1abc62d121e3b61e2912546f0e5b2dd6191f2b37283"
+    },
+    {
+      "logical_id": "docs/WORKFLOW.md",
+      "source": "payload/core/docs/agentfoundry/WORKFLOW.md",
+      "target": "docs/agentfoundry/WORKFLOW.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "32afbd63f1d2a028bcbfd8ee0d220dccd80691835ebd6fef4c5d83de7d7c0329"
+    },
+    {
+      "logical_id": "docs/README.md",
+      "source": "payload/core/docs/agentfoundry/README.md",
+      "target": "docs/agentfoundry/README.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "2e92abbf11df9cb8ce4e3811cf420ffee5686d4a36256c501a7725418023a580"
+    },
+    {
+      "logical_id": "docs/patterns/encoding-invariants.md",
+      "source": "payload/core/docs/agentfoundry/patterns/encoding-invariants.md",
+      "target": "docs/agentfoundry/patterns/encoding-invariants.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "c49f7fe5c5995e11f095c70791f731874c8cb8e1cdabef36d26581aa0a25ffd5"
+    },
+    {
+      "logical_id": "docs/product/README.md",
+      "source": "payload/core/docs/agentfoundry/product/README.md",
+      "target": "docs/agentfoundry/product/README.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "2b0066d7b85be440697eddc3b2b4197db097d07e786b7e1708b4ecc3b190b55c"
+    },
+    {
+      "logical_id": "docs/plans/README.md",
+      "source": "payload/core/docs/agentfoundry/plans/README.md",
+      "target": "docs/agentfoundry/plans/README.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "bd5d0d49dd19b0337035a30e2b06d45719282e2873854b7b24cece15509243f7"
+    },
+    {
+      "logical_id": "docs/plans/active/README.md",
+      "source": "payload/core/docs/agentfoundry/plans/active/README.md",
+      "target": "docs/agentfoundry/plans/active/README.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "a05d6098af9a87cb8c2423cf7f09499afb24239a65c64d7bb0d3fbbe7d2c07e2"
+    },
+    {
+      "logical_id": "docs/plans/completed/README.md",
+      "source": "payload/core/docs/agentfoundry/plans/completed/README.md",
+      "target": "docs/agentfoundry/plans/completed/README.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "b48a038e2bbb0b3bf62d2ed5bf796e296abb544f2bc115708f9f2bfa140335eb"
+    },
+    {
+      "logical_id": "docs/decisions/README.md",
+      "source": "payload/core/docs/agentfoundry/decisions/README.md",
+      "target": "docs/agentfoundry/decisions/README.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "42fc53806d15862cb739ff4bdca0f0add774b5b217e2c554ed225227b2475c23"
+    },
+    {
+      "logical_id": "docs/templates/application-runbook.md",
+      "source": "payload/core/docs/agentfoundry/templates/application-runbook.md",
+      "target": "docs/agentfoundry/templates/application-runbook.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "1e87f2189066dd0469555406c9ef63c3939e53adfcb23494d2f13f0b9552a72d"
+    },
+    {
+      "logical_id": "docs/templates/decision.md",
+      "source": "payload/core/docs/agentfoundry/templates/decision.md",
+      "target": "docs/agentfoundry/templates/decision.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "e92ba7a5b7bc10ce6c213af75a191619fc305c3945cdd55d4dc6bac72dcd42c1"
+    },
+    {
+      "logical_id": "docs/templates/exec-plan.md",
+      "source": "payload/core/docs/agentfoundry/templates/exec-plan.md",
+      "target": "docs/agentfoundry/templates/exec-plan.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "e82d61d0557f7ca2435aa6439d234df8cd545e1a386cf916bc809cc24db35840"
+    },
+    {
+      "logical_id": "docs/templates/harness-improvement.md",
+      "source": "payload/core/docs/agentfoundry/templates/harness-improvement.md",
+      "target": "docs/agentfoundry/templates/harness-improvement.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "790a1f89fb80b76c89b195ecb8b516c7ce37bb6af2fdfc43fc3edbe4153dd36b"
+    },
+    {
+      "logical_id": ".agents/skills/engineering-wisdom/SKILL.md",
+      "source": "payload/engineering-wisdom/.agents/skills/agentfoundry-engineering-wisdom/SKILL.md",
+      "target": ".agents/skills/agentfoundry-engineering-wisdom/SKILL.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "13ad2d123d7754343411c726f8a6779fbd81db0678de7944be970d936355c436",
+      "addon": "engineering-wisdom"
+    },
+    {
+      "logical_id": ".agents/skills/engineering-wisdom/agents/openai.yaml",
+      "source": "payload/engineering-wisdom/.agents/skills/agentfoundry-engineering-wisdom/agents/openai.yaml",
+      "target": ".agents/skills/agentfoundry-engineering-wisdom/agents/openai.yaml",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "9cf0c1bcfe962e3785b57c71d577310f11fc7a447549ab408ce43e388876e1aa",
+      "addon": "engineering-wisdom"
+    },
+    {
+      "logical_id": ".agents/skills/engineering-wisdom/references/heuristics.md",
+      "source": "payload/engineering-wisdom/.agents/skills/agentfoundry-engineering-wisdom/references/heuristics.md",
+      "target": ".agents/skills/agentfoundry-engineering-wisdom/references/heuristics.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "316802d6fede2123ff28358107ea212394f2fd1aed22d68d69938a18fe62a86a",
+      "addon": "engineering-wisdom"
+    },
+    {
+      "logical_id": ".agents/skills/engineering-wisdom/references/sources.md",
+      "source": "payload/engineering-wisdom/.agents/skills/agentfoundry-engineering-wisdom/references/sources.md",
+      "target": ".agents/skills/agentfoundry-engineering-wisdom/references/sources.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "54ac2e92aaa171809877640808f706b3d4d7016cff192e47b504a44c8f536612",
+      "addon": "engineering-wisdom"
+    },
+    {
+      "logical_id": "claude",
+      "source": "payload/core/claude-block.md",
+      "target": "CLAUDE.md",
+      "ownership": "managed_block",
+      "mode": 420,
+      "sha256": "43c1fdb7f91af6e6f75872bd30e09db051edc89e832ca5824fed7a71c57a1349",
+      "adapter": "claude"
+    },
+    {
+      "logical_id": "agentfoundry/evidence/git-readonly",
+      "source": "payload/core/.agents/skills/agentfoundry-onboard/scripts/git_readonly.py",
+      "target": ".agents/skills/agentfoundry-onboard/scripts/git_readonly.py",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "26c9d83dd05842bbe21eddb5da8b714be079bff2973498e3de3fb3098d83e9f3"
+    }
+  ]
+}

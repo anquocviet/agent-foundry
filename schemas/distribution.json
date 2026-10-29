@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentfoundry.distribution/v1",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "agentfoundry.distribution/v1"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "logical_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "ownership": {
+            "enum": [
+              "managed_file",
+              "managed_block"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "mode": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 511
+          },
+          "addon": {
+            "enum": ["engineering-wisdom", null]
+          },
+          "adapter": {
+            "enum": ["claude", null]
+          }
+        },
+        "required": [
+          "logical_id",
+          "target",
+          "ownership",
+          "source",
+          "sha256",
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 10000
+    }
+  },
+  "required": [
+    "schema",
+    "entries"
+  ],
+  "additionalProperties": false
+}
