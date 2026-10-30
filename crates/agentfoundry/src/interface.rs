@@ -316,7 +316,12 @@ pub fn run(a: &Args) -> Result<(serde_json::Value, Vec<String>, String)> {
                     }
                     if !a.dry && crate::application::pending(&root)? {
                         let _lock = crate::infrastructure::Lock::acquire(&root)?;
-                        crate::application::recover(&root, false)?;
+                        let outcome = crate::application::recover(&root, false)?;
+                        recovery_mutation = if outcome["recovery"] == "rolled_back" {
+                            "rolled_back"
+                        } else {
+                            "applied"
+                        };
                     }
                     let prepared = crate::candidate::prepare(&root)?;
                     if !a.dry {

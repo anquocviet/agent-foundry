@@ -169,6 +169,34 @@ fn main() {
             .unwrap();
         assert_eq!(interrupted.status.code(), Some(86));
         assert!(session::pending(&root).unwrap());
+        if std::env::var_os("AF_CHECK_LIST").is_some() {
+            let journal: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(root.join(".agentfoundry/runtime/transaction.json")).unwrap(),
+            )
+            .unwrap();
+            for op in journal["plan"]["operations"].as_array().unwrap() {
+                if op["before"] != op["after"] {
+                    println!("TARGET {}", op["target"].as_str().unwrap());
+                }
+            }
+            return;
+        }
+        if let Some(rollback) = std::env::var_os("AF_CHECK_ROLLBACK") {
+            let interrupted = Command::new(std::env::var("AF_CHECK_CRASH_BINARY").unwrap())
+                .args(["recover", "--directory", &args[2], "--json"])
+                .env("AGENTFOUNDRY_TEST_CRASH", rollback)
+                .output()
+                .unwrap();
+            assert_eq!(interrupted.status.code(), Some(86));
+            assert!(session::pending(&root).unwrap());
+            let recovered = run(&args[1], "recover", &[]);
+            assert_eq!(recovered["data"]["recovery"], "rolled_back");
+            assert_eq!(std::fs::read(root.join(target)).unwrap(), local);
+            assert_eq!(
+                std::fs::read(root.join(".agentfoundry/state/manifest.json")).unwrap(),
+                before
+            );
+        }
         if checkpoint == "core-committed-durable" {
             run(&args[1], "recover", &[]);
             let binary_path = root.join("scripts/bin/agentfoundry");
@@ -216,7 +244,7 @@ fn main() {
             std::fs::remove_file(&binary_path).unwrap();
             assert_eq!(
                 session::resume(&root, true).unwrap_err().code,
-                "RECOVERY_BLOCKED"
+                "RECOVERY_REQUIRED"
             );
             assert!(session::pending(&root).unwrap());
             let control: serde_json::Value = serde_json::from_slice(

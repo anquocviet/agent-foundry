@@ -489,6 +489,7 @@ pub fn resume(root: &Path, dry: bool) -> Result<serde_json::Value> {
     } else {
         Some(fs::Lock::acquire(root)?)
     };
+    let mut recovery_mutation = "none";
     if crate::application::pending(root)? {
         if dry {
             return Err(Failure::new(
@@ -496,120 +497,138 @@ pub fn resume(root: &Path, dry: bool) -> Result<serde_json::Value> {
                 "recover transaction before continue preview",
             ));
         }
-        crate::application::recover(root, false)?;
-    }
-    if crate::activation::pending(root)? {
-        crate::activation::recover_locked(root, dry)?;
-    }
-    let (session, mut plan) = load(root)?;
-    let committed = plan
-        .operations
-        .iter()
-        .find(|op| op.target == crate::STATE)
-        .and_then(|op| op.after.as_ref());
-    if committed.is_some() && fs::read(root, crate::STATE, fs::CONTROL_LIMIT)?.as_ref() == committed
-    {
-        let binary_path = if cfg!(windows) {
-            "scripts/bin/agentfoundry.exe"
+        let outcome = crate::application::recover(root, false)?;
+        recovery_mutation = if outcome["recovery"] == "rolled_back" {
+            "rolled_back"
         } else {
-            "scripts/bin/agentfoundry"
+            "applied"
         };
-        let active = fs::read(root, binary_path, 128 * 1024 * 1024)?;
-        if active
-            .as_ref()
-            .is_none_or(|bytes| fs::digest(bytes) != session.target.binary_digest)
-        {
-            return Err(Failure::new(
-                "RECOVERY_REQUIRED",
-                "committed core has no verified active executable; preserve session and restore the pinned candidate",
-            ));
-        }
-        #[cfg(unix)]
-        if crate::existing_mode(root, binary_path, 0)? & 0o111 == 0 {
-            return Err(Failure::new(
-                "RECOVERY_REQUIRED",
-                "committed executable lacks execute permission; preserve session",
-            ));
-        }
-        if !dry {
-            crate::load_state(root)?;
-            clear(root, &session)?;
-        }
-        return Ok(
-            serde_json::json!({"continued":!dry,"already_committed":true,"session_retained":dry}),
-        );
     }
-    crate::application::verify(&plan, root)?;
-    let next_state = crate::models::InstallationState::parse(
-        plan.operations
+    let result = (|| {
+        if crate::activation::pending(root)? {
+            crate::activation::recover_locked(root, dry)?;
+            if !dry {
+                recovery_mutation = "applied";
+            }
+        }
+        let (session, mut plan) = load(root)?;
+        let committed = plan
+            .operations
             .iter()
             .find(|op| op.target == crate::STATE)
-            .and_then(|op| op.after.as_deref())
-            .ok_or_else(|| Failure::new("INVALID_STATE", "state commit missing"))?,
-    )?;
-    for (index, c) in session.conflicts.iter().enumerate() {
-        let bytes = fs::read(
-            root,
-            &artifact(&session.id, &format!("{index}/RESOLVED")),
-            8 * 1024 * 1024,
-        )?
-        .ok_or_else(|| Failure::new("INVALID_STATE", "RESOLVED missing"))?;
-        let nonce = format!("AGENTFOUNDRY-RESOLUTION-{}", session.id);
-        if bytes
-            .windows(nonce.len())
-            .any(|window| window == nonce.as_bytes())
+            .and_then(|op| op.after.as_ref());
+        if committed.is_some()
+            && fs::read(root, crate::STATE, fs::CONTROL_LIMIT)?.as_ref() == committed
         {
-            return Err(Failure::new(
-                "CONFLICT_PENDING",
-                "RESOLVED still contains session conflict markers",
-            ));
+            let binary_path = if cfg!(windows) {
+                "scripts/bin/agentfoundry.exe"
+            } else {
+                "scripts/bin/agentfoundry"
+            };
+            let active = fs::read(root, binary_path, 128 * 1024 * 1024)?;
+            if active
+                .as_ref()
+                .is_none_or(|bytes| fs::digest(bytes) != session.target.binary_digest)
+            {
+                return Err(Failure::new(
+                    "RECOVERY_REQUIRED",
+                    "committed core has no verified active executable; preserve session and restore the pinned candidate",
+                ));
+            }
+            #[cfg(unix)]
+            if crate::existing_mode(root, binary_path, 0)? & 0o111 == 0 {
+                return Err(Failure::new(
+                    "RECOVERY_REQUIRED",
+                    "committed executable lacks execute permission; preserve session",
+                ));
+            }
+            if !dry {
+                crate::load_state(root)?;
+                clear(root, &session)?;
+            }
+            return Ok(
+                serde_json::json!({"continued":!dry,"already_committed":true,"session_retained":dry}),
+            );
         }
-        std::str::from_utf8(&bytes)
-            .map_err(|_| Failure::new("INVALID_STATE", "RESOLVED must be UTF-8 text"))?;
-        let op = plan
-            .operations
-            .iter_mut()
-            .find(|op| op.target == c.target)
-            .ok_or_else(|| Failure::new("INVALID_STATE", "conflict target not planned"))?;
-        let state = next_state
-            .entries
-            .iter()
-            .find(|entry| {
-                entry.target == c.target
-                    && entry.ownership == crate::models::Ownership::ManagedBlock
-            })
-            .map(|entry| {
-                if entry.target == "CLAUDE.md" {
-                    "AGENTFOUNDRY:CLAUDE"
-                } else {
-                    "AGENTFOUNDRY"
-                }
-            });
-        op.after = Some(if let Some(name) = state {
-            crate::domain::patch_block(
-                op.before
-                    .as_deref()
-                    .ok_or_else(|| Failure::new("INVALID_STATE", "block container missing"))?,
-                &bytes,
-                name,
-            )
-            .map_err(|e| Failure::new("INVALID_STATE", e))?
-        } else {
-            bytes
-        });
-    }
-    let plan_id = plan.semantic_id()?;
-    if !dry {
-        crate::activation::apply_locked(
-            root,
-            &PreparedUpdate {
-                plan,
-                conflicts: Vec::new(),
-                target: session.target.clone(),
-                release: session.release.clone(),
-            },
+        crate::application::verify(&plan, root)?;
+        let next_state = crate::models::InstallationState::parse(
+            plan.operations
+                .iter()
+                .find(|op| op.target == crate::STATE)
+                .and_then(|op| op.after.as_deref())
+                .ok_or_else(|| Failure::new("INVALID_STATE", "state commit missing"))?,
         )?;
-        clear(root, &session)?;
-    }
-    Ok(serde_json::json!({"plan_id":plan_id,"continued":!dry,"session_retained":dry}))
+        for (index, c) in session.conflicts.iter().enumerate() {
+            let bytes = fs::read(
+                root,
+                &artifact(&session.id, &format!("{index}/RESOLVED")),
+                8 * 1024 * 1024,
+            )?
+            .ok_or_else(|| Failure::new("INVALID_STATE", "RESOLVED missing"))?;
+            let nonce = format!("AGENTFOUNDRY-RESOLUTION-{}", session.id);
+            if bytes
+                .windows(nonce.len())
+                .any(|window| window == nonce.as_bytes())
+            {
+                return Err(Failure::new(
+                    "CONFLICT_PENDING",
+                    "RESOLVED still contains session conflict markers",
+                ));
+            }
+            std::str::from_utf8(&bytes)
+                .map_err(|_| Failure::new("INVALID_STATE", "RESOLVED must be UTF-8 text"))?;
+            let op = plan
+                .operations
+                .iter_mut()
+                .find(|op| op.target == c.target)
+                .ok_or_else(|| Failure::new("INVALID_STATE", "conflict target not planned"))?;
+            let state = next_state
+                .entries
+                .iter()
+                .find(|entry| {
+                    entry.target == c.target
+                        && entry.ownership == crate::models::Ownership::ManagedBlock
+                })
+                .map(|entry| {
+                    if entry.target == "CLAUDE.md" {
+                        "AGENTFOUNDRY:CLAUDE"
+                    } else {
+                        "AGENTFOUNDRY"
+                    }
+                });
+            op.after = Some(if let Some(name) = state {
+                crate::domain::patch_block(
+                    op.before
+                        .as_deref()
+                        .ok_or_else(|| Failure::new("INVALID_STATE", "block container missing"))?,
+                    &bytes,
+                    name,
+                )
+                .map_err(|e| Failure::new("INVALID_STATE", e))?
+            } else {
+                bytes
+            });
+        }
+        let plan_id = plan.semantic_id()?;
+        if !dry {
+            crate::activation::apply_locked(
+                root,
+                &PreparedUpdate {
+                    plan,
+                    conflicts: Vec::new(),
+                    target: session.target.clone(),
+                    release: session.release.clone(),
+                },
+            )?;
+            recovery_mutation = "applied";
+            clear(root, &session)?;
+        }
+        Ok(serde_json::json!({"plan_id":plan_id,"continued":!dry,"session_retained":dry}))
+    })();
+    result.map_err(|mut error: Failure| {
+        if error.mutation == "none" {
+            error.mutation = recovery_mutation.into();
+        }
+        error
+    })
 }

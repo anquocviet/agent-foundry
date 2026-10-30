@@ -60,6 +60,23 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-no-bypass-') as directory:
         assert target.read_bytes() == before and not journal.exists()
     target.write_bytes(after)
     journal.write_bytes(journal_bytes)
+    result = subprocess.run([str(binary), 'update', '--continue', '--directory', directory, '--json'],
+                            capture_output=True, text=True)
+    assert result.returncode != 0, (result.stdout, result.stderr)
+    assert json.loads(result.stdout)['mutation'] == 'rolled_back', result.stdout
+    assert target.read_bytes() == before and not journal.exists()
+    target.write_bytes(after)
+    journal.write_bytes(journal_bytes)
+    offline = os.environ.copy()
+    offline.update({'HTTPS_PROXY': 'http://127.0.0.1:1', 'https_proxy': 'http://127.0.0.1:1',
+                    'NO_PROXY': '', 'no_proxy': ''})
+    result = subprocess.run([str(binary), 'update', '--directory', directory, '--json'],
+                            env=offline, capture_output=True, text=True)
+    assert result.returncode != 0, (result.stdout, result.stderr)
+    assert json.loads(result.stdout)['mutation'] == 'rolled_back', result.stdout
+    assert target.read_bytes() == before and not journal.exists()
+    target.write_bytes(after)
+    journal.write_bytes(journal_bytes)
     result = subprocess.run([str(binary), 'update', '--offline', '--directory', directory, '--json'], capture_output=True, text=True)
     envelope = json.loads(result.stdout)
     assert result.returncode == 0 and envelope['data']['no_op'] is True, (result.stdout, result.stderr)
