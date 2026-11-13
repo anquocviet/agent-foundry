@@ -31,12 +31,15 @@ pub fn three_way(
             }
             let dir =
                 std::env::temp_dir().join(format!("agentfoundry-merge-{}", crate::unique_id()));
-            let mut builder = std::fs::DirBuilder::new();
+            let builder = std::fs::DirBuilder::new();
             #[cfg(unix)]
             {
+                let mut builder = builder;
                 use std::os::unix::fs::DirBuilderExt;
                 builder.mode(0o700);
+                builder.create(&dir)?;
             }
+            #[cfg(not(unix))]
             builder.create(&dir)?;
             struct Cleanup(std::path::PathBuf);
             impl Drop for Cleanup {

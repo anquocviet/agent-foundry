@@ -106,9 +106,10 @@ fn query_candidate(
 ) -> Result<ExportedCandidate> {
     let mut cmd = std::process::Command::new(candidate_path);
     cmd.arg("distribution").arg("--json");
+    cmd.env_remove("AF_WORKER");
+    cmd.env_remove("AF_SELECTED_BINARY");
     cmd.env("AF_INVOCATION_DEPTH", "1");
     cmd.env("AF_NO_RECURSIVE", "1");
-
     let output = crate::process::capture(&mut cmd, 32 * 1024 * 1024, Duration::from_secs(30))?;
     if !output.status.success() {
         return Err(Failure::new(
@@ -269,14 +270,106 @@ fn query_candidate(
     Ok((manifest_bytes, payload_entries, identity))
 }
 
-pub fn prepare(root: &Path) -> Result<update::PreparedUpdate> {
-    if cfg!(windows) {
+pub fn is_worker_mode() -> bool {
+    std::env::var_os("AF_WORKER").is_some()
+}
+
+pub fn verify_worker_authorization(root: &Path) -> Result<()> {
+    if !is_worker_mode() {
         return Err(Failure::new(
             "MISSING_CAPABILITY",
             "Windows candidate binary replacement requires platform adapter; candidate activation is not supported",
         ));
     }
 
+    if std::env::var_os("AF_NO_RECURSIVE").is_some()
+        || std::env::var_os("AF_WORKER_RECURSION").is_some()
+    {
+        return Err(Failure::new(
+            "INVALID_STATE",
+            "recursive worker invocation detected",
+        ));
+    }
+
+    let current_exe = std::env::current_exe()?;
+    let current_meta = std::fs::metadata(&current_exe)?;
+    if current_meta.len() > 128 * 1024 * 1024 {
+        return Err(Failure::new(
+            "INPUT_LIMIT_EXCEEDED",
+            "worker executable exceeds 128MiB limit",
+        ));
+    }
+    let worker_bytes = std::fs::read(&current_exe)?;
+    let worker_digest = fs::digest(&worker_bytes);
+
+    let selected_rel = crate::binary_path();
+    let selected_path = crate::infrastructure::safe(root, selected_rel)?;
+
+    if !selected_path.exists() {
+        return Err(Failure::new(
+            "INVALID_STATE",
+            "selected executable missing; worker mode cannot be used without selected executable; use trusted installed binary for recovery",
+        ));
+    }
+
+    let selected_env = std::env::var_os("AF_SELECTED_BINARY").ok_or_else(|| {
+        Failure::new(
+            "INVALID_ARGUMENT",
+            "AF_SELECTED_BINARY is required in worker mode",
+        )
+    })?;
+
+    let env_path = PathBuf::from(selected_env);
+    let canon_env = env_path.canonicalize().map_err(|e| {
+        Failure::new(
+            "INVALID_ARGUMENT",
+            format!("invalid AF_SELECTED_BINARY: {e}"),
+        )
+    })?;
+    let canon_sel = selected_path.canonicalize()?;
+    if canon_env != canon_sel {
+        return Err(Failure::new(
+            "INVALID_ARGUMENT",
+            "AF_SELECTED_BINARY does not match target repository executable",
+        ));
+    }
+
+    if current_exe.canonicalize()? == canon_sel {
+        return Err(Failure::new(
+            "INVALID_ARGUMENT",
+            "worker executable must be staged outside selected repository binary",
+        ));
+    }
+
+    let sel_meta = std::fs::metadata(&selected_path)?;
+    if sel_meta.len() > 128 * 1024 * 1024 {
+        return Err(Failure::new(
+            "INPUT_LIMIT_EXCEEDED",
+            "selected executable exceeds 128MiB limit",
+        ));
+    }
+    let selected_bytes = std::fs::read(&selected_path)?;
+    let selected_digest = fs::digest(&selected_bytes);
+    if worker_digest != selected_digest {
+        return Err(Failure::new(
+            "INTEGRITY_FAILURE",
+            "worker digest does not match selected binary",
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn prepare(root: &Path) -> Result<update::PreparedUpdate> {
+    if cfg!(windows) {
+        if !is_worker_mode() {
+            return Err(Failure::new(
+                "MISSING_CAPABILITY",
+                "Windows candidate binary replacement requires platform adapter; candidate activation is not supported",
+            ));
+        }
+        verify_worker_authorization(root)?;
+    }
     if std::env::var_os("AF_NO_RECURSIVE").is_some() {
         return Err(Failure::new(
             "INVALID_STATE",
@@ -339,12 +432,15 @@ pub fn prepare(root: &Path) -> Result<update::PreparedUpdate> {
             "temp directory is inside target repository",
         ));
     }
-    let mut builder = std::fs::DirBuilder::new();
+    let builder = std::fs::DirBuilder::new();
     #[cfg(unix)]
     {
+        let mut builder = builder;
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(0o700);
+        builder.create(&temp_dir)?;
     }
+    #[cfg(not(unix))]
     builder.create(&temp_dir)?;
 
     let bin_name = if cfg!(windows) {

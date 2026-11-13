@@ -206,6 +206,10 @@ fn load(root: &Path) -> Result<(Session, Plan)> {
     }
     Ok((session, plan))
 }
+pub fn retained_candidate_digest(root: &Path) -> Result<String> {
+    let (session, _) = load(root)?;
+    Ok(session.target.binary_digest)
+}
 pub fn status(root: &Path) -> Result<serde_json::Value> {
     let (session, _) = load(root)?;
     Ok(
@@ -342,11 +346,7 @@ pub fn abort(root: &Path) -> Result<serde_json::Value> {
         .and_then(|op| op.after.as_ref());
     if committed.is_some() && fs::read(root, crate::STATE, fs::CONTROL_LIMIT)?.as_ref() == committed
     {
-        let binary = if cfg!(windows) {
-            "scripts/bin/agentfoundry.exe"
-        } else {
-            "scripts/bin/agentfoundry"
-        };
+        let binary = crate::binary_path();
         let active = fs::read(root, binary, 128 * 1024 * 1024)?;
         if active
             .as_ref()
@@ -391,11 +391,7 @@ pub fn recover_activation(root: &Path, dry: bool) -> Result<serde_json::Value> {
         return Ok(serde_json::json!({"recovery":"not_needed","activation":"core_not_committed"}));
     }
     crate::load_state(root)?;
-    let target = if cfg!(windows) {
-        "scripts/bin/agentfoundry.exe"
-    } else {
-        "scripts/bin/agentfoundry"
-    };
+    let target = crate::binary_path();
     if let Some(active) = fs::read(root, target, 128 * 1024 * 1024)? {
         if fs::digest(&active) != session.target.binary_digest {
             return Err(Failure::new(
@@ -450,9 +446,33 @@ pub fn recover_activation(root: &Path, dry: bool) -> Result<serde_json::Value> {
             serde_json::json!({"recovery":"activation_preview","target":target,"binary_digest":session.target.binary_digest,"session_retained":true}),
         );
     }
+    #[cfg(windows)]
+    {
+        let is_direct_self = if let (Ok(cur), Ok(sel)) = (
+            std::env::current_exe().and_then(|p| p.canonicalize()),
+            fs::safe(root, target).and_then(|p| Ok(p.canonicalize()?)),
+        ) {
+            cur == sel
+        } else {
+            false
+        };
+        if is_direct_self {
+            return Err(Failure::new(
+                "MISSING_CAPABILITY",
+                "Windows candidate binary replacement requires platform adapter; candidate activation is not supported",
+            ));
+        }
+        if crate::candidate::is_worker_mode() {
+            crate::candidate::verify_worker_authorization(root)?;
+        }
+    }
     crate::application::apply_locked(root, &plan)?;
     let mut command = std::process::Command::new(fs::safe(root, target)?);
     command.args(["version", "--json"]);
+    command.env_remove("AF_WORKER");
+    command.env_remove("AF_SELECTED_BINARY");
+    command.env("AF_INVOCATION_DEPTH", "1");
+    command.env("AF_NO_RECURSIVE", "1");
     let result = (|| -> Result<serde_json::Value> {
         let output =
             crate::process::capture(&mut command, 64 * 1024, std::time::Duration::from_secs(10))?;
@@ -489,6 +509,19 @@ pub fn resume(root: &Path, dry: bool) -> Result<serde_json::Value> {
     } else {
         Some(fs::Lock::acquire(root)?)
     };
+    #[cfg(feature = "fault-injection")]
+    if !dry && std::env::var_os("AGENTFOUNDRY_TEST_HOLD_SESSION_LOCK").is_some() {
+        let ready = root.join(".agentfoundry/runtime/test-session-lock-ready");
+        let release = root.join(".agentfoundry/runtime/test-session-lock-release");
+        std::fs::write(&ready, b"ready")?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !release.exists() {
+            if std::time::Instant::now() >= deadline {
+                return Err(Failure::new("IO_ERROR", "test session lock timed out"));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
     let mut recovery_mutation = "none";
     if crate::application::pending(root)? {
         if dry {
@@ -520,11 +553,7 @@ pub fn resume(root: &Path, dry: bool) -> Result<serde_json::Value> {
         if committed.is_some()
             && fs::read(root, crate::STATE, fs::CONTROL_LIMIT)?.as_ref() == committed
         {
-            let binary_path = if cfg!(windows) {
-                "scripts/bin/agentfoundry.exe"
-            } else {
-                "scripts/bin/agentfoundry"
-            };
+            let binary_path = crate::binary_path();
             let active = fs::read(root, binary_path, 128 * 1024 * 1024)?;
             if active
                 .as_ref()
@@ -611,6 +640,26 @@ pub fn resume(root: &Path, dry: bool) -> Result<serde_json::Value> {
         }
         let plan_id = plan.semantic_id()?;
         if !dry {
+            #[cfg(windows)]
+            {
+                let is_direct_self = if let (Ok(cur), Ok(sel)) = (
+                    std::env::current_exe().and_then(|p| p.canonicalize()),
+                    fs::safe(root, crate::binary_path()).and_then(|p| Ok(p.canonicalize()?)),
+                ) {
+                    cur == sel
+                } else {
+                    false
+                };
+                if is_direct_self {
+                    return Err(Failure::new(
+                        "MISSING_CAPABILITY",
+                        "Windows candidate binary replacement requires platform adapter; candidate activation is not supported",
+                    ));
+                }
+                if crate::candidate::is_worker_mode() {
+                    crate::candidate::verify_worker_authorization(root)?;
+                }
+            }
             crate::activation::apply_locked(
                 root,
                 &PreparedUpdate {

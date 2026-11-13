@@ -16,10 +16,10 @@ def run(root, *args, exit=0):
     return envelope
 
 def snapshot(root):
-    return {str(p.relative_to(root)): (p.read_bytes(), p.stat().st_mode) for p in root.rglob('*') if p.is_file()}
+    return {p.relative_to(root).as_posix(): (p.read_bytes(), p.stat().st_mode) for p in root.rglob('*') if p.is_file()}
 
 with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
-    base = Path(temp)
+    base = Path(temp).resolve()
     root = base / 'consumer'
     sentinel = base / 'outside'
     sentinel.write_bytes(b'untouched')
@@ -33,7 +33,8 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
         assert hashlib.sha256(blob.read_bytes()).hexdigest() == e['sha256']
         if e['ownership'] == 'managed_file':
             assert (root / e['target']).read_bytes() == blob.read_bytes()
-    assert (root / 'scripts/bin/agentfoundry').read_bytes() == binary.read_bytes()
+    bin_target = 'scripts/bin/agentfoundry.exe' if sys.platform == 'win32' else 'scripts/bin/agentfoundry'
+    assert (root / bin_target).read_bytes() == binary.read_bytes()
     manifest_path = root / '.agentfoundry/state/manifest.json'
     manifest_bytes = manifest_path.read_bytes()
     for identity_field in ('version', 'source'):
@@ -123,7 +124,9 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
     run(root, 'update', '--offline', exit=3)
     assert snapshot(root) == missing_block
     entrypoint.write_bytes(entrypoint_bytes)
-    run(root, 'update', exit=7)
+    result = run(root, 'update', exit=6 if sys.platform == 'win32' else 7)
+    if sys.platform == 'win32':
+        assert result['code'] == 'MISSING_CAPABILITY'
     before = snapshot(root)
     run(root, 'install', '--override', '--dry-run')
     assert snapshot(root) == before
@@ -138,9 +141,15 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
     run(root, '--nonsense', exit=2)
     hostile = base / 'hostile'
     hostile.mkdir()
-    (hostile / 'docs').symlink_to(base, target_is_directory=True)
-    run(hostile, 'install', exit=5)
-    assert sentinel.read_bytes() == b'untouched'
+    try:
+        (hostile / 'docs').symlink_to(base, target_is_directory=True)
+    except OSError as error:
+        if sys.platform != 'win32' or error.winerror != 1314:
+            raise
+        print('SKIP: Windows symlink privilege unavailable')
+    else:
+        run(hostile, 'install', exit=5)
+        assert sentinel.read_bytes() == b'untouched'
     brown = base / 'brownfield'
     brown.mkdir()
     (brown / 'AGENTS.md').write_bytes(b'private instructions\r\n')
@@ -251,6 +260,38 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
         assert plan_file.stat().st_mode & 0o777 == 0o600
     assert run(planned, 'install', '--apply-plan', str(plan_file))['data']['plan_id'] == preview_id
     assert run(planned, 'status')['data']['installed']
+    # A plan authorized against the previous generation must not be replayed.
+    generation_root = base / 'generation-race'
+    run(generation_root, 'install')
+    (generation_root / 'docs/agentfoundry/WORKFLOW.md').write_bytes(b'consumer generation edit\n')
+    generation_plan = base / 'generation-plan.json'
+    run(generation_root, 'install', '--override', '--dry-run', '--plan-out', str(generation_plan))
+    before_generation = json.loads((generation_root / '.agentfoundry/state/manifest.json').read_bytes())['generation']
+    run(generation_root, 'install', '--apply-plan', str(generation_plan))
+    generation_state = generation_root / '.agentfoundry/state/manifest.json'
+    assert json.loads(generation_state.read_bytes())['generation'] == before_generation + 1
+    after_first = snapshot(generation_root)
+    stale_result = run(generation_root, 'install', '--apply-plan', str(generation_plan), exit=4)
+    assert stale_result['code'] == 'WORKSPACE_DRIFT' and stale_result['mutation'] == 'none'
+    assert snapshot(generation_root) == after_first
+    # Launch competing applies from the same frozen generation.
+    concurrent_root = base / 'concurrent-generation'
+    run(concurrent_root, 'install')
+    (concurrent_root / 'docs/agentfoundry/WORKFLOW.md').write_bytes(b'concurrent consumer edit\n')
+    concurrent_plan = base / 'concurrent-plan.json'
+    run(concurrent_root, 'install', '--override', '--dry-run', '--plan-out', str(concurrent_plan))
+    expected_workflow = bytes.fromhex(next(op['after'] for op in json.loads(concurrent_plan.read_bytes())['operations'] if op['target'] == 'docs/agentfoundry/WORKFLOW.md'))
+    concurrent_state = concurrent_root / '.agentfoundry/state/manifest.json'
+    generation = json.loads(concurrent_state.read_bytes())['generation']
+    command = [str(binary), 'install', '--apply-plan', str(concurrent_plan), '--directory', str(concurrent_root), '--json']
+    processes = [subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(2)]
+    results = [(process.returncode, stdout, stderr) for process in processes for stdout, stderr in [process.communicate(timeout=60)]]
+    outcomes = [(code, json.loads(stdout)) for code, stdout, stderr in results]
+    assert sum(code == 0 and value['mutation'] == 'applied' for code, value in outcomes) == 1, results
+    assert all(code == 0 or (value['code'] in ('LOCK_BUSY', 'WORKSPACE_DRIFT', 'RECOVERY_REQUIRED') and value['mutation'] == 'none') for code, value in outcomes), results
+    assert json.loads(concurrent_state.read_bytes())['generation'] == generation + 1
+    assert (concurrent_root / 'docs/agentfoundry/WORKFLOW.md').read_bytes() == expected_workflow
+    assert not (concurrent_root / '.agentfoundry/runtime/transaction.json').exists()
     if sys.platform != 'win32':
         import shutil
         original_root = base / 'root-identity'
@@ -301,7 +342,9 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
     recovery = base / 'recovery'
     plan_bytes = plan_file.read_bytes()
     frozen = json.loads(plan_bytes)
-    frozen['root'] = str(recovery)
+    rec_root = f'\\\\?\\{recovery.resolve()}' if sys.platform == 'win32' else str(recovery)
+    rec_identity = rec_root if sys.platform == 'win32' else f'{recovery.stat().st_dev}:{recovery.stat().st_ino}:{recovery}'
+    frozen['root'] = rec_root
     first = frozen['operations'][0].copy()
     stored_ops = []
     objects = recovery / '.agentfoundry/backups/abc/objects'
@@ -315,8 +358,8 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
                 (objects / digest).write_bytes(image)
                 stored[kind] = digest
         stored_ops.append(stored)
-    frozen = {'schema': 'agentfoundry.stored-plan/v1', 'root': str(recovery),
-        'root_identity': f'{recovery.stat().st_dev}:{recovery.stat().st_ino}:{recovery}' if sys.platform != 'win32' else str(recovery),
+    frozen = {'schema': 'agentfoundry.stored-plan/v1', 'root': rec_root,
+        'root_identity': rec_identity,
         'payload_digest': frozen['payload_digest'], 'choices': frozen['choices'], 'operations': stored_ops}
     compact = json.dumps(frozen, separators=(',', ':'), ensure_ascii=False).encode()
     backup = recovery / '.agentfoundry/backups/abc/plan.json'
@@ -325,7 +368,7 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
     journal = recovery / '.agentfoundry/runtime/transaction.json'
     journal.parent.mkdir(parents=True)
     journal.write_text(json.dumps({'schema': 'agentfoundry.journal/v1', 'id': 'abc',
-        'root': str(recovery), 'plan_hash': hashlib.sha256(compact).hexdigest(),
+        'root': rec_root, 'plan_hash': hashlib.sha256(compact).hexdigest(),
         'phase': 'Applying', 'plan': frozen}, ensure_ascii=False))
     changed = recovery / first['target']
     changed.parent.mkdir(parents=True, exist_ok=True)

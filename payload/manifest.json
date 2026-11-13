@@ -261,6 +261,14 @@
       "ownership": "managed_file",
       "mode": 420,
       "sha256": "26c9d83dd05842bbe21eddb5da8b714be079bff2973498e3de3fb3098d83e9f3"
+    },
+    {
+      "logical_id": "scripts/agentfoundry.ps1",
+      "source": "scripts/agentfoundry.ps1",
+      "target": "scripts/agentfoundry.ps1",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "2d8063262deb681f23e6f2741d76173a381ea05c3b3591d7f22344c361f08638"
     }
   ]
 }

@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-no-bypass-') as directory:
     assert json.loads(result.stdout)['mutation'] == 'applied'
     assert not (Path(directory) / '.agentfoundry/runtime/transaction.json').exists()
     # Exercise recovery too: an install-only probe cannot reach recovery error hooks.
-    root = Path(directory)
+    root = Path(directory).resolve()
     state_path = root / '.agentfoundry/state/manifest.json'
     state = json.loads(state_path.read_bytes())
     target = root / 'AGENTS.md'
@@ -30,8 +30,10 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-no-bypass-') as directory:
     images.mkdir(parents=True)
     for image in (before, after):
         (images / hashlib.sha256(image).hexdigest()).write_bytes(image)
-    plan = {'schema': 'agentfoundry.stored-plan/v1', 'root': str(root),
-            'root_identity': f'{root.stat().st_dev}:{root.stat().st_ino}:{root}' if sys.platform != 'win32' else str(root),
+    root_str = f'\\\\?\\{root.resolve()}' if sys.platform == 'win32' else str(root)
+    root_id = root_str if sys.platform == 'win32' else f'{root.stat().st_dev}:{root.stat().st_ino}:{root}'
+    plan = {'schema': 'agentfoundry.stored-plan/v1', 'root': root_str,
+            'root_identity': root_id,
             'payload_digest': state['payload_digest'],
             'choices': {key: False for key in ('merge', 'replace', 'refresh', 'wisdom', 'claude')},
             'operations': [{'target': 'AGENTS.md', 'before': hashlib.sha256(before).hexdigest(),
@@ -39,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-no-bypass-') as directory:
     compact = json.dumps(plan, separators=(',', ':')).encode()
     (images.parent / 'plan.json').write_bytes(compact)
     journal = root / '.agentfoundry/runtime/transaction.json'
-    journal.write_text(json.dumps({'schema': 'agentfoundry.journal/v1', 'id': 'abc', 'root': str(root),
+    journal.write_text(json.dumps({'schema': 'agentfoundry.journal/v1', 'id': 'abc', 'root': root_str,
                                   'plan_hash': hashlib.sha256(compact).hexdigest(), 'phase': 'Applying', 'plan': plan}))
     environment['AGENTFOUNDRY_TEST_CRASH'] = 'rollback:AGENTS.md'
     environment['AGENTFOUNDRY_TEST_RECOVERY_ERROR'] = 'AGENTS.md'
@@ -47,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-no-bypass-') as directory:
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert json.loads(result.stdout)['mutation'] == 'rolled_back'
     assert target.read_bytes() == before and not journal.exists()
-    journal_bytes = json.dumps({'schema': 'agentfoundry.journal/v1', 'id': 'abc', 'root': str(root),
+    journal_bytes = json.dumps({'schema': 'agentfoundry.journal/v1', 'id': 'abc', 'root': root_str,
                                 'plan_hash': hashlib.sha256(compact).hexdigest(), 'phase': 'Applying', 'plan': plan}).encode()
     for command in (['install', '--apply-plan', str(root.parent / 'missing-plan.json')],
                     ['update', '--offline', '--apply-plan', str(root.parent / 'missing-plan.json')],
