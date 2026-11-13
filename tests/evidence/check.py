@@ -26,7 +26,7 @@ class OnboardingEvidenceTests(unittest.TestCase):
             [ROOT / "target/release/agentfoundry", "install", "--directory", self.root]
         )
         (self.root / "src").mkdir()
-        (self.root / "src/status.sh").write_text("#!/bin/sh\nprintf 'ready\\n'\n")
+        (self.root / "src/status.sh").write_bytes(b"#!/bin/sh\nprintf 'ready\\n'\n")
         self.run_command(["git", "init", "--quiet", "--initial-branch=test"])
         self.run_command(["git", "add", "."])
         self.run_command([
@@ -55,9 +55,11 @@ class OnboardingEvidenceTests(unittest.TestCase):
         environment = os.environ.copy()
         environment.pop("PYTHONDONTWRITEBYTECODE", None)
         result = subprocess.run(
-            command, cwd=self.root, input=text, capture_output=True, text=True,
-            check=False, env=environment,
+            command, cwd=self.root, input=None if text is None else text.encode('utf-8'),
+            capture_output=True, check=False, env=environment,
         )
+        result.stdout = result.stdout.decode('utf-8')
+        result.stderr = result.stderr.decode('utf-8')
         self.assertEqual(result.returncode, expected, result.stderr)
         return result
 

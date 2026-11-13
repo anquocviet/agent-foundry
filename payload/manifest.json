@@ -95,7 +95,7 @@
       "target": ".agents/skills/agentfoundry-onboard/scripts/emit_evidence_bundle.py",
       "ownership": "managed_file",
       "mode": 420,
-      "sha256": "97fb7edea7a00a66f4b60f6d25ea81fc283d7b0f4b79ad3286d5a5adb5841d77"
+      "sha256": "4226c76d962848bf2356245f7fc96f8e8ee9d25e6a3bf20e8a74fece323d79aa"
     },
     {
       "logical_id": ".agents/skills/onboard-repository/scripts/render_patch.py",
