@@ -340,6 +340,7 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
     run(optional, 'doctor', exit=5)
     assert snapshot(optional) == damaged_snapshot
     recovery = base / 'recovery'
+    recovery.mkdir()
     plan_bytes = plan_file.read_bytes()
     frozen = json.loads(plan_bytes)
     rec_root = f'\\\\?\\{recovery.resolve()}' if sys.platform == 'win32' else str(recovery)
