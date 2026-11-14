@@ -1,0 +1,89 @@
+name: Stable candidate preparation
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable version tag (vMAJOR.MINOR.PATCH)'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, binary: target/release/agentfoundry}
+          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, binary: target/release/agentfoundry}
+          - {os: macos-15, target: aarch64-apple-darwin, binary: target/release/agentfoundry}
+          - {os: macos-15-intel, target: x86_64-apple-darwin, binary: target/release/agentfoundry}
+          - {os: windows-latest, target: x86_64-pc-windows-msvc, binary: target/release/agentfoundry.exe}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.90.0
+      - name: Verify clean tagged checkout
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          test -z "$(git status --porcelain --untracked-files=all)"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+      - name: Build stable candidate
+        env:
+          AF_STABLE_BUILD: '1'
+        run: cargo build --release --locked
+      - name: Check candidate identity
+        shell: python
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          import hashlib, json, os, pathlib, subprocess
+          binary = pathlib.Path('${{ matrix.binary }}')
+          result = json.loads(subprocess.check_output([str(binary.resolve()), '--version', '--json']))['data']
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert result['version'] == os.environ['RELEASE_TAG'][1:]
+          assert result['source'] == commit and result['distribution'] == 'stable'
+          assert result['fault_injection'] is False
+          result['platform'] = '${{ matrix.target }}'
+          result['sha256'] = hashlib.sha256(binary.read_bytes()).hexdigest()
+          (binary.parent / 'identity.json').write_text(json.dumps(result), encoding='utf-8')
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: stable-candidate-${{ matrix.target }}
+          path: |
+            ${{ matrix.binary }}
+            target/release/identity.json
+          if-no-files-found: error
+
+  package:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          pattern: stable-candidate-*
+          path: candidate-artifacts
+      - name: Assemble release bundle
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python3 scripts/package-stable.py candidate-artifacts release-bundle "$RELEASE_TAG" "$(git rev-parse HEAD)"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: stable-release-bundle
+          path: release-bundle/
+          if-no-files-found: error

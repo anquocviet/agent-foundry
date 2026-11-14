@@ -127,7 +127,7 @@ pub fn run(a: &Args) -> Result<(serde_json::Value, Vec<String>, String)> {
     }
     if a.command == "version" {
         return Ok((
-            serde_json::json!({"version":env!("CARGO_PKG_VERSION"),"source":env!("AF_SOURCE_ID"),"payload_digest":crate::PAYLOAD_DIGEST,"distribution":"development","fault_injection":env!("AF_FAULT_INJECTION") == "true"}),
+            serde_json::json!({"version":env!("CARGO_PKG_VERSION"),"source":env!("AF_SOURCE_ID"),"payload_digest":crate::PAYLOAD_DIGEST,"distribution":env!("AF_DISTRIBUTION"),"fault_injection":env!("AF_FAULT_INJECTION") == "true"}),
             vec![],
             "none".into(),
         ));
@@ -153,6 +153,10 @@ pub fn run(a: &Args) -> Result<(serde_json::Value, Vec<String>, String)> {
             }
             "doctor" => crate::diagnostics(&root, true)?,
             "recover" => {
+                #[cfg(windows)]
+                if crate::candidate::is_worker_mode() {
+                    crate::candidate::verify_worker_authorization(&root)?;
+                }
                 if !crate::application::pending(&root)? && crate::activation::pending(&root)? {
                     let outcome = crate::activation::recover(&root, a.dry)?;
                     let mutation = if !a.dry { "applied" } else { "none" };
@@ -325,18 +329,28 @@ pub fn run(a: &Args) -> Result<(serde_json::Value, Vec<String>, String)> {
                     }
                     let prepared = crate::candidate::prepare(&root)?;
                     if !a.dry {
-                        let selected = if cfg!(windows) {
-                            "scripts/bin/agentfoundry.exe"
-                        } else {
-                            "scripts/bin/agentfoundry"
-                        };
-                        if std::env::current_exe()?.canonicalize()?
-                            != crate::infrastructure::safe(&root, selected)?.canonicalize()?
+                        #[cfg(windows)]
                         {
-                            return Err(Failure::new(
-                                "INVALID_ARGUMENT",
-                                "online update activation requires invocation from the selected repository executable",
-                            ));
+                            if crate::candidate::is_worker_mode() {
+                                crate::candidate::verify_worker_authorization(&root)?;
+                            } else {
+                                return Err(Failure::new(
+                                    "MISSING_CAPABILITY",
+                                    "Windows candidate binary replacement requires platform adapter; candidate activation is not supported",
+                                ));
+                            }
+                        }
+                        #[cfg(not(windows))]
+                        {
+                            let selected = crate::binary_path();
+                            if std::env::current_exe()?.canonicalize()?
+                                != crate::infrastructure::safe(&root, selected)?.canonicalize()?
+                            {
+                                return Err(Failure::new(
+                                    "INVALID_ARGUMENT",
+                                    "online update activation requires invocation from the selected repository executable",
+                                ));
+                            }
                         }
                     }
                     if !prepared.conflicts.is_empty() {

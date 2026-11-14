@@ -25,9 +25,30 @@ python3 -B tests/acceptance/workflow_examples.py
 
 `bash scripts/validate-premerge.sh` runs the listed local source/package/evidence gates and five-boundary fault smoke in order, failing on the first error. It is a Linux development gate, not native Windows/macOS CI or the public release gate. Use `crashes.py --all-files` separately for the complete fresh-install checkpoint sweep.
 
-Package script currently targets the local Linux x64 development host; it is not the five-platform public release pipeline. `Cargo.lock` pins the resolved graph. Source identity is a development SHA-256 over declared build inputs, not an immutable Git release claim.
+`scripts/package-local.py` packages a development binary on native Linux x64 or Windows x64, verifies the public CLI and writes a SHA-256 sidecar. Windows output is `artifacts/0.1.0-dev.1/agentfoundry-windows-x64.exe`; this is not the five-platform public release pipeline. `Cargo.lock` pins the resolved graph. Source identity is a development SHA-256 over declared build inputs, not an immutable Git release claim.
 
-Fault injection is compiled only with the explicit `fault-injection` feature, has a distinct source identity, and is rejected by local packaging. Crash checks exercise interrupted install and rollback in disposable consumers, including preservation of post-commit local edits. They do not establish power-loss durability or native Windows activation safety.
+`.github/workflows/stable-candidate.yml` manually builds five stable candidates from an existing clean matching version tag, verifies their recorded identities and hashes, and uploads a downloadable bundle containing binaries, checksum sidecars and `agentfoundry-release.json`. It cannot publish a release; promotion and release approval remain separate gates. `AF_STABLE_BUILD` rejects fault injection and requires a clean tagged checkout.
+
+`.github/workflows/draft-release.yml` manually takes a stable tag and successful stable-candidate run for that exact commit, checks the downloaded bundle, creates a draft and verifies uploaded bytes. Existing releases are not overwritten; publication requires separate owner approval. A failed upload or post-upload verification can leave an incomplete draft and must not be published.
+
+`.github/workflows/ci.yml` runs native GitHub-hosted jobs for macOS Intel/arm64, Linux x64/arm64 and Windows x64. Push the workflow to a branch and open a pull request or run it with `workflow_dispatch`; uploaded binaries are development artifacts, not release candidates. Runner availability and successful remote results must be checked before claiming platform coverage.
+
+On Windows, install the MSVC C++ build tools and use a fresh checkout with `.gitattributes` applied: payload bytes must remain LF for manifest hashes. Existing CRLF payload files must be restored as LF without overwriting local edits. Native smoke commands (PowerShell, Python 3.10+):
+
+```powershell
+cargo test --workspace --all-features --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo build --release --locked
+python scripts/package-local.py
+python tests/acceptance/check.py target/release/agentfoundry.exe
+python tests/acceptance/payload.py target/release/agentfoundry.exe
+cargo build --locked --features fault-injection --target-dir target/fault-injection
+python tests/acceptance/crashes.py target/fault-injection/debug/agentfoundry.exe
+```
+
+The symlink check reports a skip without Windows symlink privilege. Windows installations include the transactionally managed `scripts/agentfoundry.ps1` launcher. Run `powershell -NoProfile -ExecutionPolicy Bypass -File PATH/scripts/agentfoundry.ps1 update --directory PATH --json`. The launcher waits for a temporary worker checked against the installed executable; if the executable is missing, recovery needs a separately available trusted AgentFoundry binary (`AGENTFOUNDRY_BIN`, launcher-local binary, or PATH). A successful published-release upgrade remains unverified.
+
+Fault injection is compiled only with the explicit `fault-injection` feature, has a distinct source identity, and is rejected by local packaging. Crash checks exercise interrupted install and rollback in disposable consumers, including preservation of post-commit local edits. They do not establish power-loss durability or Windows self-replacement safety.
 
 `inspect` reports package scripts as declarations, never executes them, and excludes secret-file discovery. Invalid package root/script types fail with `INVALID_STATE` rather than becoming command suggestions.
 

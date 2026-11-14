@@ -58,6 +58,13 @@ pub fn unique_id() -> String {
         COUNT.fetch_add(1, Ordering::Relaxed)
     )
 }
+pub fn binary_path() -> &'static str {
+    if cfg!(windows) {
+        "scripts/bin/agentfoundry.exe"
+    } else {
+        "scripts/bin/agentfoundry"
+    }
+}
 const STATE: &str = ".agentfoundry/state/manifest.json";
 fn load_state(root: &Path) -> Result<Option<InstallationState>> {
     let Some(bytes) = fs::read(root, STATE, fs::CONTROL_LIMIT)? else {
@@ -275,11 +282,7 @@ pub fn install_plan(
     }
     let binary = std::fs::read(std::env::current_exe()?)?;
     let binary_digest = fs::digest(&binary);
-    let bin = if cfg!(windows) {
-        "scripts/bin/agentfoundry.exe"
-    } else {
-        "scripts/bin/agentfoundry"
-    };
+    let bin = binary_path();
     ops.push(operation(root, bin, binary, 0o755)?);
     let config_preimage = old_config.clone();
     let config = match old_config {
@@ -483,11 +486,7 @@ pub fn diagnostics(root: &Path, doctor: bool) -> Result<serde_json::Value> {
             }
         }
     }
-    let bin = if cfg!(windows) {
-        "scripts/bin/agentfoundry.exe"
-    } else {
-        "scripts/bin/agentfoundry"
-    };
+    let bin = binary_path();
     let binary_ok =
         fs::read(root, bin, 128 * 1024 * 1024)?.is_some_and(|b| fs::digest(&b) == s.binary_digest);
     #[cfg(unix)]

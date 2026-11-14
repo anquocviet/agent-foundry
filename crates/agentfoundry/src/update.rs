@@ -63,11 +63,7 @@ pub fn prepare(root: &Path) -> Result<Plan> {
             "offline embedded update requires exact installed build identity; verified release candidate handoff is not implemented",
         ));
     }
-    let binary_path = if cfg!(windows) {
-        "scripts/bin/agentfoundry.exe"
-    } else {
-        "scripts/bin/agentfoundry"
-    };
+    let binary_path = crate::binary_path();
     let mut paths = std::collections::BTreeSet::from([
         crate::STATE.to_string(),
         ".agentfoundry/config.json".into(),
@@ -591,11 +587,7 @@ pub fn prepare_target(
         mode: crate::existing_mode(root, ".agentfoundry/config.json", 0o644)?,
     });
 
-    let binary_path = if cfg!(windows) {
-        "scripts/bin/agentfoundry.exe"
-    } else {
-        "scripts/bin/agentfoundry"
-    };
+    let binary_path = crate::binary_path();
     let local_binary = fs::read(root, binary_path, 128 * 1024 * 1024)?.ok_or_else(|| {
         Failure::new(
             "RECOVERY_REQUIRED",

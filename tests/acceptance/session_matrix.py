@@ -35,6 +35,7 @@ with tempfile.TemporaryDirectory(prefix='af-session-matrix-') as directory:
             run(block, f'applied:{target}', AF_CHECK_ROLLBACK=f'rollback:{target}')
         for checkpoint in ('rollback-durable', 'recovered-durable'):
             run(block, f'applied:{targets[-2]}', AF_CHECK_ROLLBACK=checkpoint)
-        for checkpoint in ('applied:scripts/bin/agentfoundry', 'core-committed-durable'):
+        repair_applied = 'applied:scripts/bin/agentfoundry.exe' if sys.platform == 'win32' else 'applied:scripts/bin/agentfoundry'
+        for checkpoint in (repair_applied, 'core-committed-durable'):
             run(block, 'core-committed-durable', AF_CHECK_REPAIR_CRASH=checkpoint)
 print('session matrix passed')

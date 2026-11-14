@@ -21,11 +21,7 @@ struct Record {
     mode: u32,
 }
 fn binary_path() -> &'static str {
-    if cfg!(windows) {
-        "scripts/bin/agentfoundry.exe"
-    } else {
-        "scripts/bin/agentfoundry"
-    }
+    crate::binary_path()
 }
 pub fn pending(root: &Path) -> Result<bool> {
     Ok(fs::read(root, RECORD, fs::CONTROL_LIMIT)?.is_some())
@@ -90,6 +86,10 @@ fn load(root: &Path) -> Result<(Record, Vec<u8>)> {
         ));
     }
     Ok((r, candidate))
+}
+pub fn retained_candidate_digest(root: &Path) -> Result<String> {
+    let (record, _) = load(root)?;
+    Ok(record.target.binary_digest)
 }
 pub fn apply(root: &Path, prepared: &PreparedUpdate) -> Result<()> {
     let _lock = fs::Lock::acquire(root)?;
@@ -238,6 +238,26 @@ pub(crate) fn recover_locked(root: &Path, dry: bool) -> Result<serde_json::Value
         .is_some_and(|b| fs::digest(b) == record.target.binary_digest);
     let mut applied = false;
     if !already {
+        #[cfg(windows)]
+        {
+            let is_direct_self = if let (Ok(cur), Ok(sel)) = (
+                std::env::current_exe().and_then(|p| p.canonicalize()),
+                fs::safe(root, binary_path()).and_then(|p| Ok(p.canonicalize()?)),
+            ) {
+                cur == sel
+            } else {
+                false
+            };
+            if is_direct_self {
+                return Err(Failure::new(
+                    "MISSING_CAPABILITY",
+                    "Windows candidate binary replacement requires platform adapter; candidate activation is not supported",
+                ));
+            }
+            if crate::candidate::is_worker_mode() {
+                crate::candidate::verify_worker_authorization(root)?;
+            }
+        }
         let mut plan = Plan {
             schema: "agentfoundry.plan/v1".into(),
             root: root.to_string_lossy().into(),
@@ -274,6 +294,10 @@ pub(crate) fn recover_locked(root: &Path, dry: bool) -> Result<serde_json::Value
     (|| -> Result<serde_json::Value> {
         let mut cmd = std::process::Command::new(fs::safe(root, binary_path())?);
         cmd.args(["version", "--json"]);
+        cmd.env_remove("AF_WORKER");
+        cmd.env_remove("AF_SELECTED_BINARY");
+        cmd.env("AF_INVOCATION_DEPTH", "1");
+        cmd.env("AF_NO_RECURSIVE", "1");
         let output =
             crate::process::capture(&mut cmd, 64 * 1024, std::time::Duration::from_secs(10))?;
         let data: serde_json::Value = serde_json::from_slice(&output.stdout)?;

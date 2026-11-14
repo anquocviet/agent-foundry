@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-payload-') as directory:
     entries = {e['target']: e for e in manifest['entries']}
     installed = json.loads((root / '.agentfoundry/state/manifest.json').read_text())
     assert {entry['target'] for entry in installed['entries']} == set(entries)
-    actual = {str(path.relative_to(root)) for path in root.rglob('*') if path.is_file()
+    actual = {path.relative_to(root).as_posix() for path in root.rglob('*') if path.is_file()
               and not path.is_relative_to(root / '.agentfoundry')
               and not path.is_relative_to(root / 'scripts/bin')}
     assert actual == set(entries) | {'.gitignore'}, (actual - set(entries) - {'.gitignore'}, set(entries) - actual)

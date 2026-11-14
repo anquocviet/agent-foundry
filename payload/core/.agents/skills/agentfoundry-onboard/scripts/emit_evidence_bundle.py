@@ -375,7 +375,7 @@ def main() -> int:
             producer_skill_path=args.producer_skill_path,
             read_blob=git_blob_reader(repository),
         )
-        sys.stdout.write(bundle)
+        sys.stdout.buffer.write(bundle.encode("utf-8"))
         return 0
     except (BundleError, RenderError, json.JSONDecodeError, OSError, UnicodeError) as exc:
         print(json.dumps({"error": str(exc), "valid": False}, sort_keys=True), file=sys.stderr)

@@ -23,6 +23,7 @@ fn main() {
         serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
     };
     run(&args[0], "install", &[]);
+    let root = root.canonicalize().unwrap();
     let output = Command::new(&args[1])
         .args(["distribution", "--json"])
         .output()
@@ -59,7 +60,7 @@ fn main() {
         agentfoundry::activation::apply(&root, &prepared).unwrap();
         assert!(!agentfoundry::activation::pending(&root).unwrap());
         assert_eq!(
-            fs::digest(&std::fs::read(root.join("scripts/bin/agentfoundry")).unwrap()),
+            fs::digest(&std::fs::read(root.join(agentfoundry::binary_path())).unwrap()),
             identity.binary_digest
         );
         println!("clean standalone activation passed");
@@ -112,7 +113,7 @@ fn main() {
         .unwrap();
     assert!(!blocked.status.success());
     let blocked: serde_json::Value = serde_json::from_slice(&blocked.stdout).unwrap();
-    assert_eq!(blocked["code"], "CONFLICT_PENDING");
+    assert_eq!(blocked["code"], "CONFLICT_PENDING", "{blocked}");
     assert!(session::pending(&root).unwrap());
     let normal = Command::new(&args[1])
         .args(["update", "--offline", "--directory", &args[2], "--json"])
@@ -160,6 +161,66 @@ fn main() {
     assert_eq!(drift.code, "WORKSPACE_DRIFT");
     assert_eq!(std::fs::read(&clean).unwrap(), b"external drift\n");
     std::fs::write(&clean, clean_bytes).unwrap();
+    if let Some(fault_binary) = std::env::var_os("AF_CHECK_UPDATE_RACE") {
+        let ready = root.join(".agentfoundry/runtime/test-session-lock-ready");
+        let release = root.join(".agentfoundry/runtime/test-session-lock-release");
+        let mut first = Command::new(&fault_binary)
+            .args(["update", "--continue", "--directory", &args[2], "--json"])
+            .env("AGENTFOUNDRY_TEST_HOLD_SESSION_LOCK", "1")
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !ready.exists() {
+            assert!(
+                first.try_wait().unwrap().is_none(),
+                "first update exited before lock barrier"
+            );
+            assert!(
+                std::time::Instant::now() < deadline,
+                "session lock barrier timed out"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let second = Command::new(&fault_binary)
+            .args(["update", "--continue", "--directory", &args[2], "--json"])
+            .output()
+            .unwrap();
+        let blocked: serde_json::Value = serde_json::from_slice(&second.stdout).unwrap();
+        assert_eq!(second.status.code(), Some(9), "{blocked}");
+        assert_eq!(blocked["code"], "LOCK_BUSY");
+        assert_eq!(blocked["mutation"], "none");
+        assert_eq!(std::fs::read(root.join(target)).unwrap(), local);
+        assert_eq!(
+            std::fs::read(root.join(".agentfoundry/state/manifest.json")).unwrap(),
+            before
+        );
+        assert!(session::pending(&root).unwrap());
+        std::fs::write(&release, b"release").unwrap();
+        let first = first.wait_with_output().unwrap();
+        assert!(
+            first.status.success(),
+            "{}",
+            String::from_utf8_lossy(&first.stdout)
+        );
+        assert!(!session::pending(&root).unwrap());
+        assert_eq!(
+            std::fs::read(root.join(target)).unwrap(),
+            if block {
+                agentfoundry::domain::patch_block(&local, resolved_bytes, "AGENTFOUNDRY").unwrap()
+            } else {
+                resolved_bytes.to_vec()
+            }
+        );
+        assert_eq!(
+            fs::digest(&std::fs::read(root.join(agentfoundry::binary_path())).unwrap()),
+            identity.binary_digest
+        );
+        std::fs::remove_file(ready).unwrap();
+        std::fs::remove_file(release).unwrap();
+        println!("overlapping update continuation passed");
+        return;
+    }
     if let Some(checkpoint) = std::env::var_os("AF_CHECK_CRASH") {
         let crash_binary = std::env::var("AF_CHECK_CRASH_BINARY").unwrap();
         let interrupted = Command::new(crash_binary)
@@ -199,7 +260,7 @@ fn main() {
         }
         if checkpoint == "core-committed-durable" {
             run(&args[1], "recover", &[]);
-            let binary_path = root.join("scripts/bin/agentfoundry");
+            let binary_path = root.join(agentfoundry::binary_path());
             let binary_bytes = std::fs::read(&args[1]).unwrap();
             assert_ne!(
                 std::fs::read(&binary_path).unwrap(),
@@ -319,7 +380,7 @@ fn main() {
     );
     assert!(!session::pending(&root).unwrap());
     assert_eq!(
-        fs::digest(&std::fs::read(root.join("scripts/bin/agentfoundry")).unwrap()),
+        fs::digest(&std::fs::read(root.join(agentfoundry::binary_path())).unwrap()),
         identity.binary_digest
     );
     println!("real two-build stage/marker refusal/abort/preview/continue passed");

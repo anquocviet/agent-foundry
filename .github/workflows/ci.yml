@@ -1,0 +1,209 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-matrix:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO_TERM_COLOR: always
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            expected_os: darwin
+            expected_arch: x86_64
+            binary: target/release/agentfoundry
+            fault_binary: target/fault-injection/debug/agentfoundry
+          - name: macOS arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+            expected_os: darwin
+            expected_arch: arm64
+            binary: target/release/agentfoundry
+            fault_binary: target/fault-injection/debug/agentfoundry
+          - name: Linux x64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            expected_os: linux
+            expected_arch: x86_64
+            binary: target/release/agentfoundry
+            fault_binary: target/fault-injection/debug/agentfoundry
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            expected_os: linux
+            expected_arch: aarch64
+            binary: target/release/agentfoundry
+            fault_binary: target/fault-injection/debug/agentfoundry
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            expected_os: win32
+            expected_arch: amd64
+            binary: target/release/agentfoundry.exe
+            fault_binary: target/fault-injection/debug/agentfoundry.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip jsonschema
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.90.0
+          components: rustfmt, clippy
+
+      - name: Check code formatting
+        run: cargo fmt --all --check
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Run Cargo tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Verify native target architecture and binary identity
+        shell: python
+        run: |
+          import hashlib, json, platform, subprocess, sys
+          from pathlib import Path
+
+          host_os = sys.platform
+          host_arch = platform.machine().lower()
+          expected_os = "${{ matrix.expected_os }}"
+          expected_arch = "${{ matrix.expected_arch }}"
+
+          print(f"Runner Host: OS={host_os}, Arch={host_arch}")
+          assert host_os == expected_os, f"Unexpected host OS: {host_os} != {expected_os}"
+          arch_matches = (
+              host_arch == expected_arch
+              or (expected_arch in ('x86_64', 'amd64') and host_arch in ('x86_64', 'amd64'))
+              or (expected_arch in ('aarch64', 'arm64') and host_arch in ('aarch64', 'arm64'))
+          )
+          assert arch_matches, f"Unexpected host Arch: {host_arch} != {expected_arch}"
+
+          binary = Path("${{ matrix.binary }}").resolve()
+          assert binary.exists(), f"Binary not found: {binary}"
+          digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+
+          out = subprocess.check_output([str(binary), "--version", "--json"], text=True)
+          envelope = json.loads(out)
+          assert envelope.get("schema") == "agentfoundry.command-result/v1", f"Unexpected schema: {envelope}"
+          data = envelope.get("data", {})
+          assert data.get("fault_injection") is False, "Release binary must not have fault injection enabled"
+          assert data.get("distribution") == "development", f"Expected development distribution, got {data.get('distribution')}"
+
+          print(f"Target: ${{ matrix.target }}")
+          print(f"Binary: {binary} ({binary.stat().st_size} bytes)")
+          print(f"SHA-256: {digest}")
+          print(f"Version: {data.get('version')}")
+          print(f"Source: {data.get('source')}")
+
+      - name: Build fault-injection binary
+        run: cargo build --locked --features fault-injection --target-dir target/fault-injection
+
+      - name: Acceptance smoke - check.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+          https_proxy: http://127.0.0.1:9
+          http_proxy: http://127.0.0.1:9
+          NO_PROXY: ''
+        run: python tests/acceptance/check.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - payload.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/payload.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - no_bypass.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/no_bypass.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - activation_mutation.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/activation_mutation.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - saved_plan.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/saved_plan.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - inventory.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/inventory.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - doctor.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/doctor.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - lock.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/lock.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - workflow_examples.py
+        run: python -B tests/acceptance/workflow_examples.py
+
+      - name: Acceptance smoke - evidence check
+        run: python -m unittest discover -s tests/evidence -p check.py -v
+
+      - name: Acceptance smoke - crashes.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/crashes.py ${{ matrix.fault_binary }}
+
+      - name: Acceptance smoke - interactive.py (POSIX)
+        if: runner.os != 'Windows'
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/interactive.py ${{ matrix.binary }}
+
+      - name: Acceptance smoke - windows_launcher.py (Windows)
+        if: runner.os == 'Windows'
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python tests/acceptance/windows_launcher.py ${{ matrix.binary }} ${{ matrix.fault_binary }}
+
+      - name: Acceptance smoke - schemas.py (Linux x64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          mkdir -p artifacts/0.1.0-dev.1
+          cp target/release/agentfoundry artifacts/0.1.0-dev.1/agentfoundry-linux-x64
+          python tests/acceptance/schemas.py
+
+      - name: Archive development binary artifact (no publish)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentfoundry-development-${{ matrix.target }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error

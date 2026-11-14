@@ -94,9 +94,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         b"fault-injection=0".as_slice()
     });
     println!("cargo:rustc-env=AF_FAULT_INJECTION={fault_feature}");
-    println!(
-        "cargo:rustc-env=AF_SOURCE_ID=development-sha256:{:x}",
-        source.finalize()
-    );
+    println!("cargo:rerun-if-env-changed=AF_STABLE_BUILD");
+    if env::var_os("AF_STABLE_BUILD").is_some() {
+        if fault_feature {
+            return Err("stable builds cannot enable fault injection".into());
+        }
+        let version = env::var("CARGO_PKG_VERSION")?;
+        let parts: Vec<_> = version.split('.').collect();
+        if parts.len() != 3
+            || parts.iter().any(|p| {
+                p.is_empty()
+                    || !p.bytes().all(|b| b.is_ascii_digit())
+                    || (p.len() > 1 && p.starts_with('0'))
+                    || p.parse::<u64>().is_err()
+            })
+        {
+            return Err("stable build requires exact stable semver".into());
+        }
+        let git = |args: &[&str]| -> Result<String, Box<dyn std::error::Error>> {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                .output()?;
+            if !out.status.success() {
+                return Err("git verification failed".into());
+            }
+            Ok(String::from_utf8(out.stdout)?.trim().to_owned())
+        };
+        let commit = git(&["rev-parse", "HEAD"])?;
+        if commit.len() != 40
+            || !commit
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || !git(&["status", "--porcelain", "--untracked-files=all"])?.is_empty()
+            || git(&["rev-parse", &format!("refs/tags/v{version}^{{commit}}")])? != commit
+        {
+            return Err("stable build requires clean checkout at matching release tag".into());
+        }
+        println!("cargo:rustc-env=AF_SOURCE_ID={commit}");
+        println!("cargo:rustc-env=AF_DISTRIBUTION=stable");
+    } else {
+        println!(
+            "cargo:rustc-env=AF_SOURCE_ID=development-sha256:{:x}",
+            source.finalize()
+        );
+        println!("cargo:rustc-env=AF_DISTRIBUTION=development");
+    }
     Ok(())
 }

@@ -193,9 +193,14 @@ pub fn snapshot(
                     }
                     state_digest = Some(digest.clone());
                 }
+                let default_mode = if *path == crate::binary_path() {
+                    0o755
+                } else {
+                    0o644
+                };
                 Presence::File {
                     digest,
-                    mode: crate::existing_mode(root, path, 0o644)?,
+                    mode: crate::existing_mode(root, path, default_mode)?,
                 }
             }
         };
@@ -241,6 +246,8 @@ pub fn verify_snapshot(root: &Path, frozen: &crate::models::WorkspaceSnapshot) -
     Ok(())
 }
 pub fn atomic(root: &Path, relative: &str, bytes: &[u8], mode: u32) -> Result<()> {
+    #[cfg(not(unix))]
+    let _ = mode;
     let path = safe(root, relative)?;
     let parent = path
         .parent()
@@ -267,6 +274,7 @@ pub fn atomic(root: &Path, relative: &str, bytes: &[u8], mode: u32) -> Result<()
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&temp, fs::Permissions::from_mode(mode))?;
     }
+    drop(file);
     safe(root, relative)?;
     if let Err(e) = fs::rename(&temp, &path) {
         let _ = fs::remove_file(&temp);
