@@ -7,7 +7,7 @@ cargo fmt --all --check
 cargo test --workspace --all-features --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 python3 scripts/package-local.py
-version=$(python3 -c "import tomllib; print(tomllib.load(open('crates/agentfoundry/Cargo.toml', 'rb'))['package']['version'])")
+version=$(./target/release/agentfoundry --version --json | python3 -c "import json, sys; print(json.load(sys.stdin)['data']['version'])")
 binary="artifacts/$version/agentfoundry-linux-x64"
 python3 tests/acceptance/payload.py "$binary"
 python3 tests/acceptance/no_bypass.py "$binary"

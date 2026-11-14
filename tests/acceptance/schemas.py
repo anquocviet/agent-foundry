@@ -76,12 +76,9 @@ for presence in [{'kind': 'symlink'}, {'kind': 'absent', 'digest': 'a' * 64},
     assert list(snapshot_validator.iter_errors(bad)), presence
 import subprocess
 output_validator = Draft202012Validator(json.loads((root / 'schemas/command-result.json').read_text()))
-if len(sys.argv) > 1:
-    binary = Path(sys.argv[1])
-else:
-    import tomllib
-    version = tomllib.loads((root / 'crates/agentfoundry/Cargo.toml').read_text())['package']['version']
-    binary = root / 'artifacts' / version / 'agentfoundry-linux-x64'
+if len(sys.argv) < 2:
+    raise SystemExit('usage: schemas.py BINARY')
+binary = Path(sys.argv[1])
 for args, expected_exit in [(['--version', '--json'], 0), (['--unsupported-flag', '--json'], 2)]:
     result = subprocess.run([str(binary), *args], capture_output=True, text=True)
     assert result.returncode == expected_exit
