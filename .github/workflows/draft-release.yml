@@ -1,0 +1,54 @@
+name: Prepare draft release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable tag used by the successful bundle run
+        required: true
+        type: string
+      run_id:
+        description: Successful stable candidate workflow run ID
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  draft:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source run and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SOURCE_RUN: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$SOURCE_RUN" =~ ^[1-9][0-9]*$ ]]
+          commit=$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")
+          test "$commit" = "$(git rev-parse HEAD)"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > "$RUNNER_TEMP/source-run.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["path"] == ".github/workflows/stable-candidate.yml" and r["status"] == "completed" and r["conclusion"] == "success" and r["head_sha"] == sys.argv[2]' "$RUNNER_TEMP/source-run.json" "$commit"
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name stable-release-bundle --dir bundle
+          python3 scripts/verify-release-bundle.py bundle "$RELEASE_TAG" "$commit"
+      - name: Create draft and verify uploaded bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" bundle/* --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "$RELEASE_TAG" --notes 'Draft candidate; publication requires separate owner approval.'
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName,assets > "$RUNNER_TEMP/draft.json"
+          python3 -c 'import json,os,sys; r=json.load(open(sys.argv[1])); assert r["isDraft"] and r["tagName"] == os.environ["RELEASE_TAG"] and len(r["assets"]) == 11' "$RUNNER_TEMP/draft.json"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir downloaded
+          python3 scripts/verify-release-bundle.py downloaded "$RELEASE_TAG" "$(git rev-parse HEAD)"
+          diff -rq bundle downloaded

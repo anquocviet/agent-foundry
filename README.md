@@ -27,6 +27,10 @@ python3 -B tests/acceptance/workflow_examples.py
 
 `scripts/package-local.py` packages a development binary on native Linux x64 or Windows x64, verifies the public CLI and writes a SHA-256 sidecar. Windows output is `artifacts/0.1.0-dev.1/agentfoundry-windows-x64.exe`; this is not the five-platform public release pipeline. `Cargo.lock` pins the resolved graph. Source identity is a development SHA-256 over declared build inputs, not an immutable Git release claim.
 
+`.github/workflows/stable-candidate.yml` manually builds five stable candidates from an existing clean matching version tag, verifies their recorded identities and hashes, and uploads a downloadable bundle containing binaries, checksum sidecars and `agentfoundry-release.json`. It cannot publish a release; promotion and release approval remain separate gates. `AF_STABLE_BUILD` rejects fault injection and requires a clean tagged checkout.
+
+`.github/workflows/draft-release.yml` manually takes a stable tag and successful stable-candidate run for that exact commit, checks the downloaded bundle, creates a draft and verifies uploaded bytes. Existing releases are not overwritten; publication requires separate owner approval. A failed upload or post-upload verification can leave an incomplete draft and must not be published.
+
 `.github/workflows/ci.yml` runs native GitHub-hosted jobs for macOS Intel/arm64, Linux x64/arm64 and Windows x64. Push the workflow to a branch and open a pull request or run it with `workflow_dispatch`; uploaded binaries are development artifacts, not release candidates. Runner availability and successful remote results must be checked before claiming platform coverage.
 
 On Windows, install the MSVC C++ build tools and use a fresh checkout with `.gitattributes` applied: payload bytes must remain LF for manifest hashes. Existing CRLF payload files must be restored as LF without overwriting local edits. Native smoke commands (PowerShell, Python 3.10+):

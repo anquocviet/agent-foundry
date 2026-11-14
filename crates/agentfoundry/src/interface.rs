@@ -127,7 +127,7 @@ pub fn run(a: &Args) -> Result<(serde_json::Value, Vec<String>, String)> {
     }
     if a.command == "version" {
         return Ok((
-            serde_json::json!({"version":env!("CARGO_PKG_VERSION"),"source":env!("AF_SOURCE_ID"),"payload_digest":crate::PAYLOAD_DIGEST,"distribution":"development","fault_injection":env!("AF_FAULT_INJECTION") == "true"}),
+            serde_json::json!({"version":env!("CARGO_PKG_VERSION"),"source":env!("AF_SOURCE_ID"),"payload_digest":crate::PAYLOAD_DIGEST,"distribution":env!("AF_DISTRIBUTION"),"fault_injection":env!("AF_FAULT_INJECTION") == "true"}),
             vec![],
             "none".into(),
         ));
