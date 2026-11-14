@@ -196,10 +196,7 @@ jobs:
 
       - name: Acceptance smoke - schemas.py (Linux x64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          mkdir -p artifacts/0.1.0-dev.1
-          cp target/release/agentfoundry artifacts/0.1.0-dev.1/agentfoundry-linux-x64
-          python tests/acceptance/schemas.py
+        run: python tests/acceptance/schemas.py ${{ matrix.binary }}
 
       - name: Archive development binary artifact (no publish)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

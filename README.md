@@ -1,6 +1,6 @@
 # AgentFoundry
 
-Development build `0.1.0-dev.1`, **not v1 or production-ready**. Full release scope remains [proposal](AgentFoundry-Proposal-v1.md) §24; unfinished capabilities are tracked, not removed.
+Pre-release `0.1.0` candidate preparation, **not v1 or production-ready**. Full release scope remains [proposal](AgentFoundry-Proposal-v1.md) §24; unfinished capabilities are tracked, not removed.
 
 ## Local development
 
@@ -10,22 +10,22 @@ Rust 1.90.0 (pinned), Python 3.10+ (tested locally with 3.12), Git for merge/evi
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 python3 scripts/package-local.py
-python3 tests/acceptance/check.py artifacts/0.1.0-dev.1/agentfoundry-linux-x64
+python3 tests/acceptance/check.py artifacts/0.1.0/agentfoundry-linux-x64
 python3 -m unittest discover -s tests/evidence -p check.py -v
-python3 tests/acceptance/payload.py artifacts/0.1.0-dev.1/agentfoundry-linux-x64
-python3 tests/acceptance/no_bypass.py artifacts/0.1.0-dev.1/agentfoundry-linux-x64
+python3 tests/acceptance/payload.py artifacts/0.1.0/agentfoundry-linux-x64
+python3 tests/acceptance/no_bypass.py artifacts/0.1.0/agentfoundry-linux-x64
 cargo build --locked --features fault-injection --target-dir target/fault-injection
 python3 tests/acceptance/crashes.py target/fault-injection/debug/agentfoundry --all-files
-python3 tests/acceptance/saved_plan.py artifacts/0.1.0-dev.1/agentfoundry-linux-x64
-python3 tests/acceptance/inventory.py artifacts/0.1.0-dev.1/agentfoundry-linux-x64
-python3 tests/acceptance/doctor.py artifacts/0.1.0-dev.1/agentfoundry-linux-x64
+python3 tests/acceptance/saved_plan.py artifacts/0.1.0/agentfoundry-linux-x64
+python3 tests/acceptance/inventory.py artifacts/0.1.0/agentfoundry-linux-x64
+python3 tests/acceptance/doctor.py artifacts/0.1.0/agentfoundry-linux-x64
 python3 -B examples/workflow_examples.py
 python3 -B tests/acceptance/workflow_examples.py
 ```
 
 `bash scripts/validate-premerge.sh` runs the listed local source/package/evidence gates and five-boundary fault smoke in order, failing on the first error. It is a Linux development gate, not native Windows/macOS CI or the public release gate. Use `crashes.py --all-files` separately for the complete fresh-install checkpoint sweep.
 
-`scripts/package-local.py` packages a development binary on native Linux x64 or Windows x64, verifies the public CLI and writes a SHA-256 sidecar. Windows output is `artifacts/0.1.0-dev.1/agentfoundry-windows-x64.exe`; this is not the five-platform public release pipeline. `Cargo.lock` pins the resolved graph. Source identity is a development SHA-256 over declared build inputs, not an immutable Git release claim.
+`scripts/package-local.py` packages a local binary on native Linux x64 or Windows x64, verifies the public CLI and writes a SHA-256 sidecar. Windows output is `artifacts/0.1.0/agentfoundry-windows-x64.exe`; this is not the five-platform public release pipeline. `Cargo.lock` pins the resolved graph. Local development builds record a development SHA-256 over declared build inputs; only `AF_STABLE_BUILD` from a clean tagged checkout records an immutable Git commit identity.
 
 `.github/workflows/stable-candidate.yml` manually builds five stable candidates from an existing clean matching version tag, verifies their recorded identities and hashes, and uploads a downloadable bundle containing binaries, checksum sidecars and `agentfoundry-release.json`. It cannot publish a release; promotion and release approval remain separate gates. `AF_STABLE_BUILD` rejects fault injection and requires a clean tagged checkout.
 
@@ -73,8 +73,8 @@ Snapshot/session control DTOs use strict versioned JSON with required nullable f
 Use a new disposable target outside this source repository:
 
 ```sh
-artifacts/0.1.0-dev.1/agentfoundry-linux-x64 install --directory /tmp/af-example --dry-run --json
-artifacts/0.1.0-dev.1/agentfoundry-linux-x64 install --directory /tmp/af-example --json
+artifacts/0.1.0/agentfoundry-linux-x64 install --directory /tmp/af-example --dry-run --json
+artifacts/0.1.0/agentfoundry-linux-x64 install --directory /tmp/af-example --json
 /tmp/af-example/scripts/bin/agentfoundry status --directory /tmp/af-example --json
 ```
 
@@ -86,6 +86,6 @@ Existing collisions require `--merge` (skip consumer-owned differences) or `--ov
 
 `migrate harness --directory PATH` inventories legacy state without writing. `--dry-run --plan-out /outside/migration.json` previews a verified source-baseline or 0.1.10 installation; `--apply-plan /outside/migration.json` rechecks preimages and authorizes the plan before transaction apply. Unknown baselines are read-only. Old state/docs/skills/binaries remain; only recognized entrypoint blocks are replaced, preserving outer bytes. Conflicts stop migration; existing AgentFoundry state is never overwritten. Legacy skills remain discoverable: use only the new `agentfoundry-*` skills after migration; cleanup is a separate user decision.
 
-Local pinned-fixture proof: `python3 tests/acceptance/migration.py artifacts/0.1.0-dev.1/agentfoundry-linux-x64 /path/to/repository-harness-checkout`. Both pinned Git commits must exist locally; no installer or network fetch runs.
+Local pinned-fixture proof: `python3 tests/acceptance/migration.py artifacts/0.1.0/agentfoundry-linux-x64 /path/to/repository-harness-checkout`. Both pinned Git commits must exist locally; no installer or network fetch runs.
 
 [Parity](docs/parity-matrix.md) · [Tests](docs/test-mapping.md) · [Status/checkpoint](docs/implementation-status.md) · [Decisions](docs/architecture-decisions.md) · [Notices](THIRD_PARTY_NOTICES.md)
