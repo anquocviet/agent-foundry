@@ -30,6 +30,8 @@ python3 -B tests/acceptance/workflow_examples.py
 `.github/workflows/stable-candidate.yml` manually builds five stable candidates from an existing clean matching version tag, verifies their recorded identities and hashes, and uploads a downloadable bundle containing binaries, checksum sidecars and `agentfoundry-release.json`. It cannot publish a release; promotion and release approval remain separate gates. `AF_STABLE_BUILD` rejects fault injection and requires a clean tagged checkout.
 
 `.github/workflows/draft-release.yml` manually takes a stable tag and successful stable-candidate run for that exact commit, checks the downloaded bundle, creates a draft and verifies uploaded bytes. Existing releases are not overwritten; publication requires separate owner approval. A failed upload or post-upload verification can leave an incomplete draft and must not be published.
+Bootstrap: `bash scripts/install.sh --directory PATH [install options]` on Linux/macOS (requires Bash, curl, jq and sha256sum or shasum), or `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 --directory PATH [install options]` on Windows. The wrappers acquire and verify the pinned stable release before passing options to core; they fail without creating the target if no release is available. Checksums from the same release origin are not independent publisher authentication. Production bootstrap and interactive PowerShell remain unverified.
+
 
 `.github/workflows/ci.yml` runs native GitHub-hosted jobs for macOS Intel/arm64, Linux x64/arm64 and Windows x64. Push the workflow to a branch and open a pull request or run it with `workflow_dispatch`; uploaded binaries are development artifacts, not release candidates. Runner availability and successful remote results must be checked before claiming platform coverage.
 
@@ -46,7 +48,7 @@ cargo build --locked --features fault-injection --target-dir target/fault-inject
 python tests/acceptance/crashes.py target/fault-injection/debug/agentfoundry.exe
 ```
 
-The symlink check reports a skip without Windows symlink privilege. Windows installations include the transactionally managed `scripts/agentfoundry.ps1` launcher. Run `powershell -NoProfile -ExecutionPolicy Bypass -File PATH/scripts/agentfoundry.ps1 update --directory PATH --json`. The launcher waits for a temporary worker checked against the installed executable; if the executable is missing, recovery needs a separately available trusted AgentFoundry binary (`AGENTFOUNDRY_BIN`, launcher-local binary, or PATH). A successful published-release upgrade remains unverified.
+The symlink check reports a skip without Windows symlink privilege. Windows installations include the transactionally managed `scripts/agentfoundry.ps1` launcher. Run `powershell -NoProfile -ExecutionPolicy Bypass -File PATH/scripts/agentfoundry.ps1 update --directory PATH --json`. The launcher waits for a temporary worker checked against the installed executable; if the executable is missing, recovery needs a separately available trusted AgentFoundry binary (`AGENTFOUNDRY_BIN`, launcher-local binary, or PATH). A published update succeeded against an isolated staging endpoint; production release activation remains unverified.
 
 Fault injection is compiled only with the explicit `fault-injection` feature, has a distinct source identity, and is rejected by local packaging. Crash checks exercise interrupted install and rollback in disposable consumers, including preservation of post-commit local edits. They do not establish power-loss durability or Windows self-replacement safety.
 
@@ -54,15 +56,15 @@ Fault injection is compiled only with the explicit `fault-injection` feature, ha
 
 Installed `status` includes generation, selected addons/adapters and running executable build identity; offline latest remains `Unknown`. `doctor` rejects a repo-local executable with missing Unix execute bits even when its content digest matches.
 
-`status --check-updates --directory /path/to/consumer --json` explicitly reads release metadata from the owner-approved GitHub repository `anquocviet/agent-foundry`; ordinary status remains offline. The check does not install, execute a candidate or write consumer state. Missing public release returns `RELEASE_UNAVAILABLE`, not a claim that the installed build is latest. Cross-release upgrades and activation remain unavailable.
+`status --check-updates --directory /path/to/consumer --json` explicitly reads release metadata from the owner-approved GitHub repository `anquocviet/agent-foundry`; ordinary status remains offline. The check does not install, execute a candidate or write consumer state. Missing public release returns `RELEASE_UNAVAILABLE`, not a claim that the installed build is latest. A positive published update has been verified only against an isolated staging endpoint.
 
 With a pending transaction, `status` reports a read-only recovery preview or its blocking diagnostic before loading the active manifest; it does not repair state. `doctor` still returns recovery-required until explicitly recovered.
 
 Doctor dependency observations are bounded version probes, not workflow proof. Missing Git/Python is reported as `Unknown` without failing offline maintenance; observed versions also remain `Unknown` until minimum-version and capability verification is implemented.
 
-Offline update captures and revalidates all managed containers, baseline objects, config, manifest and repo-local executable before returning a plan. Snapshot hashes cover exact whole-file bytes and Unix modes; this detects controlled planning drift, not uncooperative-writer isolation. Persisted conflict sessions and cross-release update remain unimplemented.
+Offline update captures and revalidates all managed containers, baseline objects, config, manifest and repo-local executable before returning a plan. Snapshot hashes cover exact whole-file bytes and Unix modes; this detects controlled planning drift, not uncooperative-writer isolation. Distinct-build conflict staging, continue and abort have development acceptance evidence; the complete tamper, crash and native matrix remains open.
 
-Snapshot/session control DTOs use strict versioned JSON with required nullable fingerprints and preimages. Parsing validates portable paths and semantic input bindings; snapshot fingerprints must match frozen control entries and conflict LOCAL hashes must match frozen workspace entries. Public conflict staging/continue/abort is still unavailable.
+Snapshot/session control DTOs use strict versioned JSON with required nullable fingerprints and preimages. Parsing validates portable paths and semantic input bindings; snapshot fingerprints must match frozen control entries and conflict LOCAL hashes must match frozen workspace entries.
 
 `update --offline --dry-run --plan-out /outside/plan.json` saves an exact embedded-update preview; `update --offline --apply-plan /outside/plan.json` rejects drift and reauthorizes against the same installed build. Saved plans remain inline and limited to 16 MiB; this does not enable cross-release upgrades.
 
@@ -76,7 +78,7 @@ artifacts/0.1.0-dev.1/agentfoundry-linux-x64 install --directory /tmp/af-example
 /tmp/af-example/scripts/bin/agentfoundry status --directory /tmp/af-example --json
 ```
 
-Implemented: offline inspect/status/doctor, fresh installation/adoption, explicit replacement, marker shims, optional wisdom/Claude, no-op reinstall preserving local changes, snapshot-checked saved install plans, blob-backed journal/backup recovery, Git three-way decision adapter, namespaced protocol and inherited evidence helpers. `update --offline` validates the exact installed embedded build and preserves local edits; it cannot upgrade across releases. Consumer writes go through the transaction engine. Cross-release update/conflict sessions/self-update/bootstrap remain **not implemented** and block release.
+Implemented in development: offline inspect/status/doctor, fresh installation/adoption, explicit replacement, marker shims, optional wisdom/Claude, no-op reinstall preserving local changes, snapshot-checked saved plans, blob-backed journal/backup recovery, Git three-way planning, conflict sessions and executable activation. A published update has been exercised only against an isolated staging release, not production. Bootstrap and release acceptance remain incomplete; see [implementation status](docs/implementation-status.md). Consumer writes go through the transaction engine.
 
 Existing collisions require `--merge` (skip consumer-owned differences) or `--override` (replace selected targets with backup). `--refresh-agent-shim` integrates the managed block without replacing outer instructions. Read `--help --json` and [recovery limitations](docs/recovery.md). Do not use this build on valuable repositories.
 
