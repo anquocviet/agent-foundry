@@ -1,5 +1,31 @@
 use agentfoundry::{infrastructure as fs, session, update};
 use std::{path::PathBuf, process::Command};
+fn snapshot(root: &std::path::Path) -> std::collections::BTreeMap<PathBuf, (String, u32)> {
+    let mut files = std::collections::BTreeMap::new();
+    let mut directories = vec![root.to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        for entry in std::fs::read_dir(directory).unwrap() {
+            let entry = entry.unwrap();
+            let metadata = entry.metadata().unwrap();
+            if metadata.is_dir() {
+                directories.push(entry.path());
+            } else {
+                #[cfg(unix)]
+                let mode = {
+                    use std::os::unix::fs::PermissionsExt;
+                    metadata.permissions().mode()
+                };
+                #[cfg(not(unix))]
+                let mode = u32::from(metadata.permissions().readonly());
+                files.insert(
+                    entry.path().strip_prefix(root).unwrap().to_path_buf(),
+                    (fs::digest(&std::fs::read(entry.path()).unwrap()), mode),
+                );
+            }
+        }
+    }
+    files
+}
 fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     assert_eq!(
@@ -121,12 +147,41 @@ fn main() {
         .unwrap();
     let normal: serde_json::Value = serde_json::from_slice(&normal.stdout).unwrap();
     assert_eq!(normal["code"], "SESSION_EXISTS");
+    let refused = |expected: &str| {
+        for extra in [vec!["--continue", "--dry-run"], vec!["--continue"]] {
+            let before = snapshot(&root);
+            let output = Command::new(&args[1])
+                .args(["update", "--directory", &args[2], "--json"])
+                .args(extra)
+                .output()
+                .unwrap();
+            let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert!(!output.status.success(), "{result}");
+            assert_eq!(result["code"], expected, "{result}");
+            assert_eq!(result["mutation"], "none", "{result}");
+            assert_eq!(
+                snapshot(&root),
+                before,
+                "refusal changed consumer or evidence"
+            );
+        }
+    };
     let resolved_path = root.join(report["conflicts"][0]["resolved"].as_str().unwrap());
+    refused("CONFLICT_PENDING");
+    let candidate_path = root.join(format!(
+        ".agentfoundry/backups/{}/objects/{}",
+        report["id"].as_str().unwrap(),
+        identity.binary_digest
+    ));
+    let candidate_bytes = std::fs::read(&candidate_path).unwrap();
+    std::fs::write(&candidate_path, b"tampered candidate").unwrap();
+    refused("RECOVERY_BLOCKED");
+    std::fs::write(&candidate_path, candidate_bytes).unwrap();
     for kind in ["BASE", "LOCAL", "UPSTREAM"] {
         let path = resolved_path.with_file_name(kind);
         let bytes = std::fs::read(&path).unwrap();
         std::fs::write(&path, b"tampered").unwrap();
-        assert!(session::resume(&root, true).is_err());
+        refused("INTEGRITY_FAILURE");
         std::fs::write(path, bytes).unwrap();
     }
     let control = root.join(".agentfoundry/runtime/resolution.json");
@@ -134,10 +189,31 @@ fn main() {
     let mut control_value: serde_json::Value = serde_json::from_slice(&control_bytes).unwrap();
     control_value["target"]["binary_digest"] = serde_json::json!("0".repeat(64));
     std::fs::write(&control, serde_json::to_vec(&control_value).unwrap()).unwrap();
-    assert!(session::resume(&root, true).is_err());
-    std::fs::write(control, control_bytes).unwrap();
+    refused("INTEGRITY_FAILURE");
+    std::fs::write(&control, control_bytes).unwrap();
+    let plan_path = resolved_path
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("plan.json");
+    let plan_bytes = std::fs::read(&plan_path).unwrap();
+    std::fs::write(&plan_path, b"{}").unwrap();
+    refused("INTEGRITY_FAILURE");
+    std::fs::write(plan_path, plan_bytes).unwrap();
+    let before_abort = snapshot(&root);
     run(&args[1], "update", &["--abort"]);
     assert_eq!(std::fs::read(root.join(target)).unwrap(), local);
+    let retained = |files: std::collections::BTreeMap<PathBuf, (String, u32)>| {
+        files
+            .into_iter()
+            .filter(|(path, _)| {
+                path != std::path::Path::new(".agentfoundry/runtime/resolution.json")
+                    && !path.starts_with(".agentfoundry/runtime/resolutions")
+            })
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    assert_eq!(retained(snapshot(&root)), retained(before_abort));
     let prepared = prepare();
     session::stage(&root, &prepared).unwrap();
     let resolved = report["conflicts"][0]["resolved"].as_str().unwrap();
@@ -150,15 +226,50 @@ fn main() {
         b"Resolved by consumer\n".as_slice()
     };
     std::fs::write(root.join(actual), resolved_bytes).unwrap();
+    std::fs::write(root.join(actual), [0xff]).unwrap();
+    refused("INVALID_STATE");
+    std::fs::remove_file(root.join(actual)).unwrap();
+    refused("INVALID_STATE");
+    std::fs::write(root.join(actual), resolved_bytes).unwrap();
+    let control_bytes = std::fs::read(&control).unwrap();
+    for change in ["extra", "missing", "duplicate"] {
+        let mut value: serde_json::Value = serde_json::from_slice(&control_bytes).unwrap();
+        let entries = value["frozen"]["entries"].as_array_mut().unwrap();
+        match change {
+            "extra" => entries
+                .push(serde_json::json!({"path":"unknown-input", "presence":{"kind":"absent"}})),
+            "missing" => {
+                entries.pop();
+            }
+            _ => entries.push(entries[0].clone()),
+        }
+        std::fs::write(&control, serde_json::to_vec(&value).unwrap()).unwrap();
+        refused("INVALID_STATE");
+        std::fs::write(&control, &control_bytes).unwrap();
+    }
+    for path in [".agentfoundry/config.json", "docs/agentfoundry/README.md"] {
+        let path = root.join(path);
+        let bytes = std::fs::read(&path).unwrap();
+        let mut changed = bytes.clone();
+        changed.push(b' ');
+        std::fs::write(&path, changed).unwrap();
+        refused("WORKSPACE_DRIFT");
+        std::fs::write(path, bytes).unwrap();
+    }
+    let preview_before = snapshot(&root);
     run(&args[1], "update", &["--continue", "--dry-run"]);
+    assert_eq!(
+        snapshot(&root),
+        preview_before,
+        "preview changed consumer or evidence"
+    );
     assert_eq!(std::fs::read(root.join(target)).unwrap(), local);
     assert!(session::pending(&root).unwrap());
     assert_eq!(std::fs::read(root.join(actual)).unwrap(), resolved_bytes);
     let clean = root.join("AGENTS.md");
     let clean_bytes = std::fs::read(&clean).unwrap();
     std::fs::write(&clean, b"external drift\n").unwrap();
-    let drift = session::resume(&root, true).unwrap_err();
-    assert_eq!(drift.code, "WORKSPACE_DRIFT");
+    refused("WORKSPACE_DRIFT");
     assert_eq!(std::fs::read(&clean).unwrap(), b"external drift\n");
     std::fs::write(&clean, clean_bytes).unwrap();
     if let Some(fault_binary) = std::env::var_os("AF_CHECK_UPDATE_RACE") {
