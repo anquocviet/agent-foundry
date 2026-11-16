@@ -637,6 +637,16 @@ pub fn resume(root: &Path, dry: bool) -> Result<serde_json::Value> {
             } else {
                 bytes
             });
+            if op
+                .after
+                .as_ref()
+                .is_some_and(|bytes| bytes.len() > 8 * 1024 * 1024)
+            {
+                return Err(Failure::new(
+                    "INPUT_LIMIT_EXCEEDED",
+                    format!("resolved output exceeds 8388608 bytes: {}", c.target),
+                ));
+            }
         }
         let plan_id = plan.semantic_id()?;
         if !dry {

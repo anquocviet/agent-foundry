@@ -102,7 +102,11 @@ fn main() {
     let local = if block {
         let text = String::from_utf8(original.clone()).unwrap();
         let heading = text.lines().find(|line| line.starts_with("## ")).unwrap();
-        text.replacen(heading, "## LOCAL CONFLICT", 1).into_bytes()
+        format!(
+            "Consumer prefix\n{}",
+            text.replacen(heading, "## LOCAL CONFLICT", 1)
+        )
+        .into_bytes()
     } else {
         let mut bytes = b"LOCAL CONFLICT\n".to_vec();
         bytes
@@ -231,6 +235,16 @@ fn main() {
     std::fs::remove_file(root.join(actual)).unwrap();
     refused("INVALID_STATE");
     std::fs::write(root.join(actual), resolved_bytes).unwrap();
+    if block {
+        let mut oversized = b"<!-- AGENTFOUNDRY:BEGIN -->\n".to_vec();
+        let end = b"\n<!-- AGENTFOUNDRY:END -->\n";
+        oversized.resize(8 * 1024 * 1024 - end.len(), b'x');
+        oversized.extend_from_slice(end);
+        assert_eq!(oversized.len(), 8 * 1024 * 1024);
+        std::fs::write(root.join(actual), oversized).unwrap();
+        refused("INPUT_LIMIT_EXCEEDED");
+        std::fs::write(root.join(actual), resolved_bytes).unwrap();
+    }
     let control_bytes = std::fs::read(&control).unwrap();
     for change in ["extra", "missing", "duplicate"] {
         let mut value: serde_json::Value = serde_json::from_slice(&control_bytes).unwrap();

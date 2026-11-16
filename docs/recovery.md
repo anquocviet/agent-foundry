@@ -37,11 +37,11 @@ Preserve-only operations are revalidated but never replaced during rollback. Unc
 - Locking is cooperative; editors do not participate. Path-chain checks and immediate preimage checks do not eliminate every symlink-swap/check-rename race. No attacker sandbox claim.
 - Original bytes and Unix ordinary permission bits are preserved; ACLs, ownership, special permission bits and directory preimages are not fully modeled. Created empty directories may remain after rollback.
 - Atomic replacement plus Unix file/directory sync is implemented; no whole-filesystem isolation or power-loss proof. No NFS/SMB/WSL Windows-mount guarantees.
-- Windows x86_64 local tests cover selected recovery crashes but not safe self-replacement. Online candidate activation is disabled pending partial-replacement recovery. macOS native proof remains open.
+- Production v0.1.0 bootstrap and same-version update passed on Linux x64 and Windows x64, including the installed PowerShell launcher. Cross-version production upgrade, exhaustive Windows `ReplaceFileW` partial-outcome recovery and full native crash coverage remain unverified.
 - Clean update records activation independently before core commit; interrupted activation requires recovery. Conflict-session and crash coverage remain partial.
 - Journal root/hash and backup content are verified and mutation targets have an internal allowlist, but this is not authentication against malicious same-account edits. Complete generation/config/mode snapshots, exhaustive crash coverage and strict architectural port boundaries remain required.
 - Dry-run does not create target files. Explicit plan-out writes outside the target with exclusive creation; plain preview does not write temp files. Merge adapter uses OS temp only when called; it is not exposed by read-only inspect.
-- The release client pins a GitHub repository; publishing is not authorized. Checksum sidecars are consistency checks, not publisher signatures.
+- The release client pins `anquocviet/agent-foundry`; production v0.1.0 was published after owner approval. Any subsequent publication requires explicit approval. Checksum sidecars are consistency checks, not publisher signatures.
 
 A failed or incomplete gate means this remains a development build. See the full backlog before expanding use.
 
@@ -54,6 +54,8 @@ Migration uses the same journal/backup engine and leaves legacy state, binaries,
 Explicit migration apply enters the recovery gate before legacy detection/plan construction, matching install/update. Inventory and dry-run remain read-only and do not recover a pending journal. After a recoverable interruption, rerun the explicit migration apply; unknown drift or corrupt recovery evidence still blocks it.
 
 Cross-release text sessions retain a hashed StoredPlan, frozen snapshot, verified binary images and exact BASE/LOCAL/UPSTREAM under local runtime/backup storage. `status` shows RESOLVED paths. `update --continue --dry-run` validates without applying; `update --continue` applies under the transaction lock; `update --abort` removes declared session artifacts without changing installed files. Backup images remain for recovery. Unresolved session-specific markers block continue. Managed blocks merge their owned bytes only; resolved blocks must retain valid ownership delimiters and are patched into the frozen container, preserving prefix/suffix bytes.
+
+Resolved text is bounded at 8 MiB. For managed blocks, this limit applies to the final container including preserved consumer prefix/suffix, not just RESOLVED. Oversized continuation returns `INPUT_LIMIT_EXCEEDED` before applying or clearing the session; reduce the resolved block and retry.
 
 If `update --continue` recovers a transaction or completes activation before a later error, its mutation field reports the completed rollback or application rather than `none`.
 
