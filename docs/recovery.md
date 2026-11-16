@@ -37,11 +37,11 @@ Preserve-only operations are revalidated but never replaced during rollback. Unc
 - Locking is cooperative; editors do not participate. Path-chain checks and immediate preimage checks do not eliminate every symlink-swap/check-rename race. No attacker sandbox claim.
 - Original bytes and Unix ordinary permission bits are preserved; ACLs, ownership, special permission bits and directory preimages are not fully modeled. Created empty directories may remain after rollback.
 - Atomic replacement plus Unix file/directory sync is implemented; no whole-filesystem isolation or power-loss proof. No NFS/SMB/WSL Windows-mount guarantees.
-- Production v0.1.0 bootstrap and same-version update passed on Linux x64 and Windows x64, including the installed PowerShell launcher. Cross-version production upgrade, exhaustive Windows `ReplaceFileW` partial-outcome recovery and full native crash coverage remain unverified.
+- Production v0.1.0 bootstrap/same-version update and v0.1.0 to v0.1.1 upgrade passed on Linux x64 and Windows x64, including the installed PowerShell launcher, preserved local edits, exact activated digest and idempotent recovery. Exhaustive Windows `ReplaceFileW` partial-outcome recovery and full native crash coverage remain unverified.
 - Clean update records activation independently before core commit; interrupted activation requires recovery. Conflict-session and crash coverage remain partial.
 - Journal root/hash and backup content are verified and mutation targets have an internal allowlist, but this is not authentication against malicious same-account edits. Complete generation/config/mode snapshots, exhaustive crash coverage and strict architectural port boundaries remain required.
 - Dry-run does not create target files. Explicit plan-out writes outside the target with exclusive creation; plain preview does not write temp files. Merge adapter uses OS temp only when called; it is not exposed by read-only inspect.
-- The release client pins `anquocviet/agent-foundry`; production v0.1.0 was published after owner approval. Any subsequent publication requires explicit approval. Checksum sidecars are consistency checks, not publisher signatures.
+- The release client pins `anquocviet/agent-foundry`; production v0.1.0 and v0.1.1 were published after owner approval. Any subsequent publication requires explicit approval. Checksum sidecars are consistency checks, not publisher signatures.
 
 A failed or incomplete gate means this remains a development build. See the full backlog before expanding use.
 
