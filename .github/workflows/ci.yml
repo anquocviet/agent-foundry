@@ -194,6 +194,10 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: python tests/acceptance/windows_launcher.py ${{ matrix.binary }} ${{ matrix.fault_binary }}
 
+      - name: Acceptance smoke - windows_replacefile.py (Windows)
+        if: runner.os == 'Windows'
+        run: python -B tests/acceptance/windows_replacefile.py ${{ matrix.fault_binary }}
+
       - name: Acceptance smoke - schemas.py (Linux x64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: python tests/acceptance/schemas.py ${{ matrix.binary }}
