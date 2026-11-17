@@ -286,13 +286,33 @@ def main():
         handle = kernel.CreateFileW(str(consumer_bin), 0x80000000, 1, None, 3, 0x80, None)
         assert handle != ctypes.c_void_p(-1).value, ctypes.get_last_error()
         record_before = act_file.read_bytes()
+        journal_file = consumer / ".agentfoundry/runtime/transaction.json"
+        preserved_files = [state_file, consumer / "AGENTS.md", consumer / "docs/agentfoundry/WORKFLOW.md"]
+        preserved_bytes = {path: path.read_bytes() for path in preserved_files}
+        backups_before = set((consumer / ".agentfoundry/backups").glob("*/plan.json"))
         try:
+            preview = json.loads(run_launcher("recover", "--directory", str(consumer), "--dry-run", "--json").stdout)
+            assert preview["data"]["recovery"] == "activation_preview"
+            assert consumer_bin.read_bytes() == original_bin_bytes
+            assert not journal_file.exists()
             denied = run_launcher("recover", "--directory", str(consumer), "--json", expected_exit=1)
             response = json.loads(denied.stdout)
-            assert response["code"] == "IO_ERROR" and response["mutation"] != "none", response
+            assert response["code"] == "IO_ERROR" and response["mutation"] == "rolled_back", response
             assert consumer_bin.read_bytes() == original_bin_bytes
             assert act_file.read_bytes() == record_before
             assert candidate_obj.read_bytes() == distinct_bin_bytes
+            assert not journal_file.exists(), "successful automatic rollback must clear active journal"
+            assert not list(consumer_bin.parent.glob(".agentfoundry-*.tmp"))
+            retained_plans = set((consumer / ".agentfoundry/backups").glob("*/plan.json")) - backups_before
+            assert len(retained_plans) == 1
+            stored = json.loads(next(iter(retained_plans)).read_text(encoding="utf-8"))
+            binary_op = next(op for op in stored["operations"] if op["target"] == "scripts/bin/agentfoundry.exe")
+            assert binary_op["before"] == original_bin_digest and binary_op["after"] == distinct_bin_digest
+            objects = next(iter(retained_plans)).parent / "objects"
+            assert (objects / original_bin_digest).read_bytes() == original_bin_bytes
+            assert (objects / distinct_bin_digest).read_bytes() == distinct_bin_bytes
+            for path, contents in preserved_bytes.items():
+                assert path.read_bytes() == contents
         finally:
             assert kernel.CloseHandle(handle)
 
@@ -303,6 +323,13 @@ def main():
         assert result["mutation"] == "applied"
         assert digest(consumer_bin.read_bytes()) == distinct_bin_digest
         assert not act_file.exists()
+        assert not journal_file.exists() and candidate_obj.read_bytes() == distinct_bin_bytes
+        for path, contents in preserved_bytes.items():
+            assert path.read_bytes() == contents
+        for _ in range(2):
+            repeated = json.loads(run_launcher("recover", "--directory", str(consumer), "--json").stdout)
+            assert repeated["data"]["recovery"] == "not_needed"
+            assert digest(consumer_bin.read_bytes()) == distinct_bin_digest
 
         # Restage the same activation to exercise the missing-binary path separately.
         consumer_bin.write_bytes(original_bin_bytes)
