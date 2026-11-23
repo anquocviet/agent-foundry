@@ -107,6 +107,52 @@ class OnboardingEvidenceTests(unittest.TestCase):
             ], expected=expected)
         return result, digest
 
+    def validate_events(self, events, expected=0, include_digest=True):
+        raw = "".join(json.dumps(event) + "\n" for event in events).encode()
+        digest = hashlib.sha256(raw).hexdigest()
+        with tempfile.TemporaryDirectory(prefix="harness-transcript-") as directory:
+            transcript = Path(directory) / "session.jsonl"
+            transcript.write_bytes(raw)
+            command = [
+                sys.executable, self.validator, "--repository", self.root,
+                "--transcript", transcript,
+            ]
+            if include_digest:
+                command.extend(["--expected-transcript-sha256", digest])
+            return self.run_command(command, expected=expected), digest
+
+    def test_transcript_authentication_requires_expected_digest(self):
+        bundle = self.emit().stdout
+        events = [
+            {"type": "response_item", "payload": {
+                "type": "custom_tool_call_output", "output": bundle,
+            }},
+            {"type": "event_msg", "payload": {
+                "type": "task_complete", "last_agent_message": "No backfill proposed.",
+            }},
+        ]
+        result, _ = self.validate_events(events, expected=1, include_digest=False)
+        self.assertIn("--expected-transcript-sha256 is required", result.stderr)
+        self.assertEqual(self.snapshot(), self.before)
+
+    def test_stale_bundle_from_prior_turn_is_refused(self):
+        bundle = self.emit().stdout
+        events = [
+            {"type": "response_item", "payload": {
+                "type": "custom_tool_call_output", "output": bundle,
+            }},
+            {"type": "event_msg", "payload": {
+                "type": "task_complete", "last_agent_message": "First turn complete.",
+            }},
+            {"type": "event_msg", "payload": {
+                "type": "task_complete",
+                "last_agent_message": "Second turn complete without a bundle.",
+            }},
+        ]
+        result, _ = self.validate_events(events, expected=1)
+        self.assertIn("earlier turn", result.stderr)
+        self.assertEqual(self.snapshot(), self.before)
+
     def capsule(self, bundle):
         return json.loads(bundle.split(CAPSULE_BEGIN + "\n```json\n", 1)[1]
                           .split("\n```\n" + CAPSULE_END, 1)[0])

@@ -23,7 +23,7 @@
       "target": ".agents/skills/agentfoundry-audit/scripts/validate_evidence_capsule.py",
       "ownership": "managed_file",
       "mode": 420,
-      "sha256": "df0633a92d59b867c17be38e45e88a868d07b50004683771899608b1b20428f5"
+      "sha256": "58864967f437056009bb759b8e2c453d1b3662b9de92a1acbc9e30a53dfd23a3"
     },
     {
       "logical_id": ".agents/skills/encode-invariant/SKILL.md",

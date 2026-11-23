@@ -491,14 +491,15 @@ def transcript_message(
     path: Path,
     expected_sha256: str | None,
 ) -> tuple[str, str, str | None, str]:
+    require(expected_sha256 is not None,
+            "--expected-transcript-sha256 is required with --transcript")
     with path.open("rb") as stream:
         raw = stream.read(100 * 1024 * 1024 + 1)
     require(len(raw) <= 100 * 1024 * 1024, "INPUT_LIMIT_EXCEEDED: transcript exceeds 100 MiB")
     actual_sha = sha256_bytes(raw)
-    if expected_sha256 is not None:
-        require_sha(expected_sha256, "expected transcript SHA-256")
-        require(actual_sha == expected_sha256,
-                f"transcript SHA-256 mismatch: expected {expected_sha256}, got {actual_sha}")
+    require_sha(expected_sha256, "expected transcript SHA-256")
+    require(actual_sha == expected_sha256,
+            f"transcript SHA-256 mismatch: expected {expected_sha256}, got {actual_sha}")
     completed: list[tuple[int, str]] = []
     assistant_messages: list[str] = []
     machine_outputs: list[tuple[int, str]] = []
@@ -537,13 +538,19 @@ def transcript_message(
                 machine_outputs.append((line_number, output_text))
     if completed:
         last_complete_line, completed_message = completed[-1]
+        previous_complete_line = completed[-2][0] if len(completed) > 1 else 0
         eligible_bundles = [
             output for line_number, output in machine_outputs
-            if line_number < last_complete_line
+            if previous_complete_line < line_number < last_complete_line
         ]
         if eligible_bundles:
             message, bundle_sha = extract_machine_bundle(eligible_bundles[-1])
             return message, actual_sha, bundle_sha, "machine_tool_output"
+        if any(line_number < last_complete_line for line_number, _ in machine_outputs):
+            raise CapsuleError(
+                "transcript has a machine evidence bundle only in an earlier turn; "
+                "the final completed turn must contain its own bundle"
+            )
         return completed_message, actual_sha, None, "completed_assistant_message"
     require(assistant_messages, "transcript contains no completed assistant message")
     return assistant_messages[-1], actual_sha, None, "incomplete_assistant_fallback"
