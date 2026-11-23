@@ -26,6 +26,7 @@ jobs:
             expected_os: darwin
             expected_arch: x86_64
             binary: target/release/agentfoundry
+            packaged: agentfoundry-x86_64-apple-darwin
             fault_binary: target/fault-injection/debug/agentfoundry
           - name: macOS arm64
             os: macos-15
@@ -33,6 +34,7 @@ jobs:
             expected_os: darwin
             expected_arch: arm64
             binary: target/release/agentfoundry
+            packaged: agentfoundry-aarch64-apple-darwin
             fault_binary: target/fault-injection/debug/agentfoundry
           - name: Linux x64
             os: ubuntu-24.04
@@ -40,6 +42,7 @@ jobs:
             expected_os: linux
             expected_arch: x86_64
             binary: target/release/agentfoundry
+            packaged: agentfoundry-x86_64-unknown-linux-gnu
             fault_binary: target/fault-injection/debug/agentfoundry
           - name: Linux arm64
             os: ubuntu-24.04-arm
@@ -47,6 +50,7 @@ jobs:
             expected_os: linux
             expected_arch: aarch64
             binary: target/release/agentfoundry
+            packaged: agentfoundry-aarch64-unknown-linux-gnu
             fault_binary: target/fault-injection/debug/agentfoundry
           - name: Windows x64
             os: windows-latest
@@ -54,6 +58,7 @@ jobs:
             expected_os: win32
             expected_arch: amd64
             binary: target/release/agentfoundry.exe
+            packaged: agentfoundry-x86_64-pc-windows-msvc.exe
             fault_binary: target/fault-injection/debug/agentfoundry.exe
 
     steps:
@@ -127,6 +132,38 @@ jobs:
 
       - name: Build fault-injection binary
         run: cargo build --locked --features fault-injection --target-dir target/fault-injection
+
+      - name: Stage packaged artifact and identity record
+        shell: python
+        run: |
+          import hashlib, json, shutil, subprocess, sys
+          from pathlib import Path
+
+          source = Path("${{ matrix.binary }}").resolve()
+          target = "${{ matrix.target }}"
+          dist = Path("dist")
+          dist.mkdir(exist_ok=True)
+          name = "${{ matrix.packaged }}"
+          packaged = (dist / name).resolve()
+          shutil.copy2(source, packaged)
+          digest = hashlib.sha256(packaged.read_bytes()).hexdigest()
+          (dist / (name + ".sha256")).write_text(f"{digest}  {name}\n", encoding="utf-8")
+          identity = json.loads(subprocess.check_output(
+              [str(packaged), "--version", "--json"], text=True))["data"]
+          identity.update(platform=target, asset=name, sha256=digest,
+                          release_ready=False)
+          (dist / "identity.json").write_text(json.dumps(identity, indent=2) + "\n",
+                                              encoding="utf-8")
+          assert identity["fault_injection"] is False
+          assert digest == hashlib.sha256(source.read_bytes()).hexdigest()
+
+      - name: Native packaged T-060 matrix
+        run: >-
+          python tests/acceptance/native_matrix.py
+          --platform "${{ matrix.target }}"
+          --binary "dist/${{ matrix.packaged }}"
+          --fault-binary "${{ matrix.fault_binary }}"
+          --output "dist/native-matrix-${{ matrix.target }}.json"
 
       - name: Acceptance smoke - check.py
         env:
@@ -202,9 +239,10 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: python tests/acceptance/schemas.py ${{ matrix.binary }}
 
-      - name: Archive development binary artifact (no publish)
+      - name: Archive packaged artifact and T-060 proof (no publish)
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: agentfoundry-development-${{ matrix.target }}
-          path: ${{ matrix.binary }}
-          if-no-files-found: error
+          path: dist/
+          if-no-files-found: warn

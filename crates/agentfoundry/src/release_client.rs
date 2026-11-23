@@ -183,8 +183,41 @@ pub(crate) fn get_with_redirects_bounded(
             .ok_or_else(|| {
                 crate::Failure::new("NETWORK_ERROR", "release observation deadline exceeded")
             })?;
+        // Route validated production URLs through a loopback server only in fault builds.
+        #[cfg(feature = "fault-injection")]
+        let fixture_url = std::env::var("AGENTFOUNDRY_RELEASE_HTTP_PORT")
+            .ok()
+            .map(|port| {
+                let port = port.parse::<u16>().map_err(|_| {
+                    crate::Failure::new("INVALID_ARGUMENT", "invalid test release HTTP port")
+                })?;
+                let uri: ureq::http::Uri = current_url.parse().map_err(|error| {
+                    crate::Failure::new("NETWORK_ERROR", format!("invalid URL: {error}"))
+                })?;
+                Ok::<_, crate::Failure>(format!(
+                    "http://127.0.0.1:{port}{}",
+                    uri.path_and_query().map_or("/", |path| path.as_str())
+                ))
+            })
+            .transpose()?;
+        #[cfg(feature = "fault-injection")]
+        let agent = if fixture_url.is_some() {
+            ureq::Agent::config_builder()
+                .https_only(false)
+                .proxy(None)
+                .max_redirects(0)
+                .http_status_as_error(false)
+                .build()
+                .new_agent()
+        } else {
+            agent.clone()
+        };
+        #[cfg(feature = "fault-injection")]
+        let request_url = fixture_url.as_deref().unwrap_or(&current_url);
+        #[cfg(not(feature = "fault-injection"))]
+        let request_url = &current_url;
         let mut response = match agent
-            .get(&current_url)
+            .get(request_url)
             .header("User-Agent", "agentfoundry")
             .header("Accept", accept)
             .config()

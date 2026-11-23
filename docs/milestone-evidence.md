@@ -281,3 +281,216 @@ The final strengthened file/block lifecycle harness also passed on native Window
 Native Windows managed-block continuation additionally passed with `AF_CHECK_CRASH=core-committed-durable` and the fault-injection executable: committed-core recovery, refusal of unknown active binary, abort retaining candidate, missing-candidate refusal, read-only activation preview, offline binary repair, repeated recovery and final continuation. This is one selected crash boundary, not the complete Windows matrix.
 
 Linux x86_64 `python3 -B tests/acceptance/session_matrix.py target/release/examples/check-session target/release/agentfoundry /tmp/af-session-target/target/release/agentfoundry target/fault-injection/debug/agentfoundry` completed with `session matrix passed`: file and block apply checkpoints, each precommit operation rollback, RollingBack/Recovered boundaries and two activation-repair interruptions. The sweep used the earlier strengthened harness (candidate/plan/input integrity and preview/abort snapshots); the subsequently added frozen-entry and config/README drift cases were verified separately in the final Linux and Windows file/block lifecycle runs, not across every crash checkpoint.
+
+## AF-009 absent-path and stable-shaped metadata refusal
+
+`crates/agentfoundry/examples/check-session.rs` gained 126 lines and no production Rust changes. Two scenarios ran in the same deterministic harness for both file (`docs/agentfoundry/WORKFLOW.md`) and managed-block (`AGENTS.md`, `AF_CHECK_BLOCK=1`) conflicts.
+
+- Frozen absent input becomes present: after install, the consumer config selects the bundled `claude` adapter so the next update plan includes an absent `CLAUDE.md` operation. The staged session control is asserted to record `frozen.entries[CLAUDE.md].presence.kind == "absent"`. Creating `CLAUDE.md` makes public `update --continue --dry-run` and `update --continue` exit nonzero with `WORKSPACE_DRIFT`, `mutation: none`, and an identical consumer/session/backup file snapshot; the new file bytes and `session::pending` are checked before removal for later lifecycle steps.
+- Stable-shaped metadata tampering: `pin_local_stable_metadata` rewrites a real `prepare_target` result for the distinct target build with a synthetic 40-hex `source_commit` derived from the candidate digest and a five-platform `ReleaseMetadata` inventory whose current-platform size/SHA-256 match the actual target executable. This metadata is local and synthetic, not downloaded, published, tag-protected, signed, or provenance-verified. Positive control with intact metadata reaches the unresolved-marker refusal `CONFLICT_PENDING` with `mutation: none` and an unchanged snapshot. Tampering the current-platform asset `sha256` with zeros or the `source_commit` with 40 zeros makes public continue refuse `INTEGRITY_FAILURE`, `mutation: none`, with an unchanged snapshot and retained session; control bytes are restored exactly. Public `update --abort` then succeeds and the consumer target plus manifest JSON remain byte-identical to their pre-session values.
+
+Commands (Linux x86_64; disposable target source via `git archive HEAD`):
+
+```sh
+export PATH="$HOME/.cargo/bin:$PATH"
+cd /home/anquocviet/workspaces/agent-foundry
+CARGO_TARGET_DIR=/tmp/af009-old-release cargo build --locked --release --bins --example check-session
+cd /tmp/af009-target-src
+CARGO_TARGET_DIR=/tmp/af009-target-release cargo build --locked --release
+```
+
+```sh
+timeout 900 /tmp/af009-old-release/release/examples/check-session \
+  /tmp/af009-old-release/release/agentfoundry \
+  /tmp/af009-target-release/release/agentfoundry \
+  /tmp/af009-consumer-file
+# exit 0
+AF_CHECK_BLOCK=1 timeout 900 /tmp/af009-old-release/release/examples/check-session \
+  /tmp/af009-old-release/release/agentfoundry \
+  /tmp/af009-target-release/release/agentfoundry \
+  /tmp/af009-consumer-block
+# exit 0
+```
+
+Identities: old/installed build `sha256 01b577d25cf20d4b4820ee4cdd9718ccf2f4d5681c42c66cb20f7faa4878db92`, source `development-sha256:3ce605280dd918997fc45522818797da354fe629c86b3be74376f30b08e8e5a0`, payload `edae019f...`; target build `sha256 6d0e4c85fa3ec4030f55b405366236a1231180b22868e797bad303299e47c7cb`, version `0.1.1`, source `development-sha256:9d83e37da040220ec147821b2fe0dbc66c3b4c34f517a32361cd0ad834d6b631`, payload `d533fda6f07908e98b010b4aa8e71ff19592ee2a4b5504ba29d5466e469f6f59`; the target reports `distribution: development`. Distinct payloads were `AGENTS.md` `5cc44130e4ec...` -> `f488dda45cbd...` and `WORKFLOW.md` `32afbd63f1d2...` -> `3db49ff50c66...`. Both final consumers contain the newly planned `CLAUDE.md`, have no pending `resolution.json`, and cleared the session after public continuation.
+
+Limits: this is local synthetic stable-shaped metadata, not positive published-stable acquisition or provenance. It does not prove native Windows/macOS execution of the new scenarios; the Windows matrix worker owns that native coverage on its fixed earlier source snapshot. No production model/validation change was needed, and no test rerun, commit, or publication was part of this documentation slice. The target build's `0.1.1` version label is a local development identity, not evidence about the production `v0.1.1` release recorded elsewhere in this repository.
+
+## Native Windows file/block session crash matrix
+
+On 2026-11-18, native Windows Python 3.12 ran the unchanged `tests/acceptance/session_matrix.py` against release-mode MSVC executables from the fixed `94d27d1` source snapshot and a disposable distinct development payload. The coordinator awaited the existing matrix process rather than rerunning it; the retained `matrix-release.log` ended with `session matrix passed`.
+
+```powershell
+$root = 'C:\Users\anqvi\AppData\Local\Temp\af-win-matrix-20261118'
+& 'C:\Users\anqvi\AppData\Local\Programs\Python\Python312\python.exe' -u -B "$root\base\tests\acceptance\session_matrix.py" "$root\out\base-release\release\examples\check-session.exe" "$root\out\base-release\release\agentfoundry.exe" "$root\out\target-release\release\agentfoundry.exe" "$root\out\fault-release\release\agentfoundry.exe"
+```
+
+The 38 successful invocations comprise 19 each for managed-file and managed-block conflicts: one operation-list discovery, ten apply checkpoints (before journal, Prepared, Applying, five changed operations including manifest, CoreCommitted and before completion), four per-operation rollback interruptions, RollingBack and Recovered interruptions, and two executable-repair interruptions. The runner raises on any nonzero child exit and prints its final success only after both modes complete. No runner change was necessary.
+
+Executable SHA-256 identities:
+
+| Executable | SHA-256 |
+|---|---|
+| Baseline | `45932a0a6fa23f8121ddbb0330fd7825a08edd985e64f461eb951b35c24c1296` |
+| Distinct target | `e3564d3581e5d8310cb5963fa2b76e7958604f580901026e16f01d4bfc8ce998` |
+| Fault-enabled baseline | `75f2819721a5fb7626c4181936c11f37a9d4e24866dc44ff5dbb70a75191f84f` |
+| check-session | `06bdc306dbdb6d48d55f47d53bc30cf5d259a9b882a612932c2648839fa6603b` |
+
+Snapshot harness hashes: `session_matrix.py` `1e576c14f1cf7e68788c7d73ebb5701e5155fd559002bc8bce3630c1ff11fe80`; `check-session.rs` `625e146f779a3929262ea0bead5454c5a1c35184999782fd73206218b63137f8`.
+
+Limits: this matrix uses the earlier frozen harness, not the subsequently added absent-path and synthetic stable-shaped metadata scenarios verified separately on Linux above. It proves native Windows process-exit recovery for these enumerated file/block checkpoints, not published stable candidate provenance, macOS/arm64 coverage, arbitrary termination or power-loss durability. No release was published.
+
+## Native Windows updated AF-009 refusal regressions
+
+The updated authoritative `check-session.rs` (SHA-256 `bb46542d4cbfd8db69ebe92304fa0ae10abd9750eeb854b53c37edda8ea3d3ec`) passed two native Windows runs on 2026-11-18: file and managed-block modes, both exit 0 with `real two-build stage/marker refusal/abort/preview/continue passed`. A fixed archive of all 118 current tracked working-tree files included the uncommitted harness, rather than the old child-worktree HEAD; native source hash matched the authoritative file. Snapshot archive SHA-256: `cb60c97b9975f3567df6ce284f881e039dc3b52b2fec7217cb2fb29a21cefc88`.
+
+```powershell
+$root = 'C:\Users\anqvi\AppData\Local\Temp\af009-windows-new-20261118'
+& "$root\out\base-release\release\examples\check-session.exe" "$root\out\base-release\release\agentfoundry.exe" "$root\out\target-release\release\agentfoundry.exe" "$root\out\consumer-file"
+# exit 0
+$env:AF_CHECK_BLOCK = '1'
+& "$root\out\base-release\release\examples\check-session.exe" "$root\out\base-release\release\agentfoundry.exe" "$root\out\target-release\release\agentfoundry.exe" "$root\out\consumer-block"
+# exit 0
+```
+
+Both modes assert frozen absent `CLAUDE.md` becoming present causes `WORKSPACE_DRIFT` in preview/apply; current-platform asset digest and source_commit tampering cause `INTEGRITY_FAILURE`, with mutation none, unchanged snapshots and retained evidence. Intact synthetic metadata reaches the positive `CONFLICT_PENDING` control. Final continuation succeeds, clears the session and installs exact target digest `0863a704c2a948a4447295ac47d54b66ad07cd653c9ccbf0a1df709df24b1f39` in both consumers. Baseline executable SHA-256 `088e0a79d744603b2103f6cbdcae636273e9b5dd29717f1e09c5704262f985fb`; harness executable `502c646bef71f9ba9099af25ac1de49989f58f1595e3ef85c3d5262801ff2a3c`.
+
+Only the two targeted modes were run; the earlier crash matrix was not rerun. The target payload/source matches the prior distinct Windows development candidate, but these are freshly rebuilt binaries. Metadata remains a local synthetic stable-shaped fixture, not published-stable acquisition/provenance. No production validation change, commit or publication was needed.
+
+## T-044 repository containment and T-045 pinned pointer transition
+
+On 2026-11-18, Linux runnable examples `check-repo-pin` and `check-release-pointer` both exited 0 after review removed conditional skips and arbitrary-error acceptance. The new local transport is compiled only with existing `fault-injection`; default/stable have no alternate source. Fixture reads are bounded, tags validated before path construction, and normal metadata/tag/inventory/size/SHA-256/candidate identity checks remain active.
+
+T-044 invocation:
+
+```sh
+/tmp/af045-default-target/debug/examples/check-repo-pin \
+  /tmp/af-prod-0.1.0 artifacts/0.1.0/agentfoundry-linux-x64 \
+  /tmp/af009-target-release/release/agentfoundry /tmp/af044-run
+```
+
+Distinct disposable installations A/B: invoking A against B refuses online with exit 2 / `INVALID_ARGUMENT` / mutation none, and offline with exit 6 / `MISSING_CAPABILITY` / mutation none. Both recursive byte/mode snapshots remain identical. After staging a real conflict in B, public continuation invoked through A activates B's pinned candidate SHA-256 `6d0e4c85fa3ec4030f55b405366236a1231180b22868e797bad303299e47c7cb`; A stays unchanged. The online check fails rather than skips if a newer downloadable public candidate is unavailable.
+
+T-045 invocation:
+
+```sh
+/tmp/af045-fault-target/debug/examples/check-release-pointer \
+  /tmp/af045-baseline-target/debug/agentfoundry \
+  /tmp/af045-fixture-inputs/api-v0.1.0.json \
+  /tmp/af045-fixture-inputs/metadata-v0.1.0.json \
+  /tmp/af045-fixture-inputs/binary-v0.1.0 \
+  /tmp/af045-fixture-inputs/api-v0.1.1.json \
+  /tmp/af045-fixture-inputs/metadata-v0.1.1.json \
+  /tmp/af045-fixture-inputs/binary-v0.1.1 \
+  /tmp/af045-default-target/debug/agentfoundry /tmp/af045-pointer-run
+```
+
+A disposable lower-version development/fault baseline publicly stages real stable v0.1.0: exit 3 / `CONFLICT_PENDING` / staged_only. The local fixture pointer then changes to real v0.1.1 and public status observes that new source. Public `update --continue` exits 0 / OK / applied, clears the session, preserves resolved content, and activates pinned v0.1.0 digest `b5a9f3a55c8f57ea26661f38f81319a246ce1ad6b533e3a71112cdf6aaacce06`, not v0.1.1 digest `0eb6f58b865a56fa20704c49fc3508a56094a6594d52d3d89038e17bf83cbb1c`. Manifest and executable identity match v0.1.0 source `1e36498dfacf81a586c4c99675776f7425e90a9f`; the pointer remains v0.1.1 source `b9395577fabcc22ccde9c2c6b4be5691e92f7239` after continuation.
+
+Default exclusion is checked via absent fixture marker bytes in the binary, a non-vacuous missing-marker error on the fault build, and equal successful real-endpoint observations with/without the fixture environment variable on the default build. `AF_STABLE_BUILD=1 cargo build --features fault-injection --bin agentfoundry` exits 101 with `stable builds cannot enable fault injection`.
+
+Limits: real published metadata/API JSON/binaries, but pointer transition and transport are local test fixtures. Only Linux executed these two gates; no Windows/macOS, crash, concurrent-writer or production pointer mutation is claimed. The fixture environment variable is not compiled into default/stable binaries. No dependency, commit or publication was added.
+
+## T-006/T-007 override readiness and rollback
+
+On 2026-11-18, extended `tests/acceptance/bootstrap.py` passed Bash and native Windows PowerShell checks against a verified production v0.1.0 bundle with local fixture transport. Same-size candidate corruption and missing candidate both refused before readiness, preserving full recursive consumer bytes/modes (Bash) or native file attributes/hashes (Windows), local managed edits, user docs, a missing owned path and an outside sentinel. A subsequent successful override recreated the owned path, intentionally replaced owned edits, preserved user docs and passed installed offline update without MissingManaged.
+
+```sh
+PATH="/tmp/af006-tools:$PATH" python3 -B tests/acceptance/bootstrap.py \
+  /tmp/af006-bootstrap-bundle \
+  /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
+# exit 0
+python3 -B tests/acceptance/override_recovery.py \
+  /tmp/af006-bootstrap-bundle/agentfoundry-x86_64-unknown-linux-gnu \
+  /home/anquocviet/orca/workspaces/agent-foundry/override-safety/target/fault-injection/debug/agentfoundry
+# exit 0
+```
+
+`override_recovery.py` installed real stable v0.1.0, edited owned WORKFLOW plus AGENTS outer bytes and custom ignore content, added private docs, removed owned README and left CLAUDE absent. Real fault exits (86) at `journal-durable`, `applied:CLAUDE.md` and `applied:scripts/bin/agentfoundry` retained durable journal/backup evidence. Public recovery preview was read-only; recovery reported rolled_back and restored exact working/control bytes and modes, including intended absence. Repeat recovery reported not_needed; backup plans remained. Final override, offline update and repeated override/recovery proved the restored baseline remains usable without self-induced missing-managed state.
+
+Stable asset SHA-256: Linux `b5a9f3a55c8f57ea26661f38f81319a246ce1ad6b533e3a71112cdf6aaacce06`; Windows `8ca4d9d67d49bef9d45556834fb52ad8cd8f1f3fc541971527f9256f81a1764a`. Fault build `0.1.1` SHA-256 `0c5ae17b7e7498b8848fe88cc80521f23157c8f6b94acd9f6cf6b78729d1c7f0`, fault_injection true. Source snapshot included the current uncommitted parent Rust changes, not merely child HEAD. No production fix was required.
+
+Limits: T-007 crash rollback executed on Linux only; Windows bootstrap refusal and successful override passed, not a Windows override crash sweep. Fixture transport is not live-endpoint proof. No ACL/security-descriptor, timestamp, inode or power-loss claim. Logs: `/tmp/af006-bootstrap-final.log`, `/tmp/af006-override-recovery-final.log`. No commit or publication.
+
+## T-009 native PowerShell interactive Override dry-run
+
+On 2026-11-18, `tests/acceptance/powershell_interactive.py` passed on native Windows 11 / PowerShell 5.1 / Python 3.12 using a genuine console input handle (`AllocConsole`, `CONIN$`, `GetConsoleMode`, `WriteConsoleInputW`). The production prompt appeared before input; actual `o` + Enter selected Override without command-line `--override` or `--json`. Only the disposable wrapper copy's network transport was substituted; argument forwarding, candidate probing/validation, console inheritance and core `IsTerminal` gate remained unmodified.
+
+```powershell
+python tests/acceptance/powershell_interactive.py C:\Users\anqvi\AppData\Local\Temp\af009-t009\bundle
+# exit 0: T-009 PASS: native PowerShell interactive Override dry-run preserved targets
+python tests/acceptance/powershell_interactive.py C:\Users\anqvi\AppData\Local\Temp\af-stable-bundle-43460091795
+# exit 0: independent verified staging bundle control
+```
+
+The installed-consumer run produced a nonempty plan (4 changes), `mutation: none`, and unchanged recursive bytes/modes/path entries including all 129 consumer/control entries, manifest/executable and colliding user-owned CLAUDE.md. The fresh-consumer run produced 61 planned changes while preserving all 7 pre-existing entries; no `.agentfoundry`, scripts directory or executable was created. The outside sentinel stayed unchanged. A non-terminal stdin control exited 2 / INVALID_ARGUMENT without prompt or mutation, with the same installed snapshot unchanged.
+
+Current-source candidate was a locally tagged synthetic stable fixture, not a release: source `68e63561abe6efaeee537881114ed6b2b8f2cf93`, SHA-256 `3ccd279902cfa4dc46ed72fe7aa9eebf4c5ee0d9676082c2f5eb9069711c95eb`, payload `edae019f7b8aac91c9b2f2f5ced893a4e728c9303ca775df584a24e28e8d241c`. Frozen current authoritative source matched all 120 copied files; production wrapper SHA-256 `b3760ccf6a536be10c85c22bda5e9a86b011ebeaf7c9e9c74027e36a45a52102` and core interface `60a57c7cd1b21094527c81cad4f2f9012b6d24d6a88c5c6093fc3ab00847f813`. Independent staging candidate SHA-256 `f03f377f22e6fc940dc924ee00f479f6602d88ee457415bd94510d17d96fb0c0` passed the same scenarios.
+
+Logs: `/tmp/opencode/t009-current-fixture.log`, `/tmp/opencode/t009-verified-bundle.log`. No production fix was needed. Limits: local fixture transport, no live HTTPS/provenance or Windows ACL claim; snapshots cover bytes, mode bits, path kinds/membership and symlink targets. No production commit, release publication or settings change.
+
+## Release-gate continuation: authenticated audit evidence and promotion boundaries
+
+Installed audit validator now requires `--expected-transcript-sha256` with `--transcript` and refuses a machine bundle from an earlier completed turn when the final completed turn has none. Legacy producer revisions may still use their completed-message capsule route; this change does not remove that contract. `cargo build --locked --offline --release --bin agentfoundry` passed, followed by `python3 -m unittest discover -s tests/evidence -p check.py -v`: 23 tests passed, including both new regressions. This is validator behavior proof, not an independent full/patch/reissue audit.
+
+`python3 -B tests/acceptance/release_promotion.py` passed 10 deterministic GitHub-boundary scenarios using the actual draft preparation script and bundle verifier: complete draft/latest-pointer preservation, interrupted creation with refusal on retry, explicit owner recovery then retry, silent partial creation, corrupt upload, incomplete download, existing published release refusal, manual publication during state read without deletion, ambiguous view failure closed, and a negative control detecting a published partial. Failed draft evidence is retained; no automatic deletion or overwrite exists.
+
+`python3 -B tests/acceptance/promote_release.py` passed read-only token preparation and six cases: wrong approval, interrupted download, incomplete inventory, interruption before publish, lost response after server-side publish, and success with idempotent read-only retry. The actual promotion implementation binds repository/tag/commit/release ID, asset identities and verified bytes; no real GitHub release was mutated. Fixtures use synthetic binary bytes solely to exercise the release-control boundary, not native binary identity or publisher authentication. GitHub has no atomic compare-and-swap spanning verification and publication: freeze other asset writers; no multi-writer atomicity guarantee is claimed. Additional safety review is pending.
+
+Native packaged-driver local results: Linux x64 `/tmp/af060-linux-proof.json` passed all 8 groups against artifact SHA-256 `01b577d25cf20d4b4820ee4cdd9718ccf2f4d5681c42c66cb20f7faa4878db92`; native Windows x64 also passed its 8 groups on the pre-existing local development artifact. These artifacts predate the validator change and are not updated-payload or five-platform proof. Owner authorized a selective verification branch commit and remote CI, not merge/publication. Commit `2035c789f643a71f12d4609adce5c5655d3f5a8c` on `verify/release-gates-20261123` contains the authenticated-validator fixes, manifest/test updates and packaged native driver/CI wiring. [Run 45108364019](https://github.com/anquocviet/agent-foundry/actions/runs/45108364019) was dispatched; native results must be recorded separately after completion.
+
+### T-060 native packaged matrix completed
+
+[CI run 45108364019](https://github.com/anquocviet/agent-foundry/actions/runs/45108364019) succeeded on commit `2035c789f643a71f12d4609adce5c5655d3f5a8c`. All five native jobs passed artifact identity, host identity, install, status, doctor, merge, fault separation and recovery (40/40 groups), plus their existing applicable CI checks. `gh run download 45108364019 --repo anquocviet/agent-foundry --dir /tmp/af060-ci-45108364019` retrieved five artifact/proof sets. A read-only Python verification asserted five proofs, eight passed rows per proof, and exact binary SHA-256 agreement with both identity and proof. Common payload digest: `c250bbbe690e6075cbb2ce558378beb192fa7a29ca1f8972280e27443543abf4`.
+
+| Native host | Packaged binary SHA-256 |
+| --- | --- |
+| macOS arm64 | `af733b75e1a74173fd261369d40b586804f46926a775a5df25bd53b6bdb32a45` |
+| Linux arm64 | `db5974233ab9a04da52d7da8d71aa16fe061bb1f202527adda81477b4d592064` |
+| macOS x64 | `5a334dbe41382cdd92658840291abfde61da8d637725cf12126429b574be099e` |
+| Windows x64 | `4a6b0a039fc8185ce411ab1d42c1b9cf17b05f55e10f7e48b40d0d07acc95e60` |
+| Linux x64 | `21f35aa739ca972538f73711531804e2c2f4b17be9b59511aa23e428fbbecd45` |
+
+T-060 is passed for native development packages. No merge, stable build, public release, live HTTPS bootstrap or exhaustive per-operation crash matrix is inferred. The draft workflow trust boundary was separately corrected to run only from the default branch and check out `github.workflow_sha` for controller scripts; candidate tag supplies only identity/data. YAML parsing and embedded Bash syntax passed locally; no draft workflow or publication was executed remotely.
+
+### T-058 safety review and final local proof
+
+Independent `omp` review froze current controller/test bytes and fixed actual unbounded asset-response writes, ambiguous short tag resolution, missing end-of-verification tag reread, malformed PATCH JSON reconciliation, and overly broad `not found` absence detection. Draft preparation now reuses the promotion verifier's bounded asset-ID downloads and compares complete bytes against the local verified bundle. Scripts do not run candidate binaries, delete releases or replace assets. Parent separately fixed the write-token workflow's candidate-code execution: default-branch dispatch only, controller checkout at `github.workflow_sha`, candidate commit passed as data. YAML parsing and Bash syntax passed; the workflow was not dispatched remotely.
+
+Worker ran `python3 tests/acceptance/promote_release.py` and `python3 tests/acceptance/release_promotion.py` once after all edits; both exited 0. Promotion: 11 scenarios plus read-only approval and a real subprocess shim emitting 1,000,000 bytes against declared size 3, rejected before writing more than 3 bytes. A follow-up regression accepts changing download counts while binding only stable asset identity fields; additional cases cover moved tags, changed release identity, corrupt bytes and invalid publish JSON. Draft: 11 scenarios, including wrong tag commit and misleading proxy `not found` refusal. Logs: `/tmp/af058-promote-final.log`, `/tmp/af058-draft-final.log`; review: `/tmp/af058-final-review.md`.
+
+Parent integration SHA-256 values match the tested child exactly: `scripts/promote-release.py` `bbbbb016b18c68a4413437eaa62e2092bfa4bda4eb60f16253a1c2458446f2c8`; `scripts/prepare-draft-release.py` `9c0647908df1a984970e2e0cbd53b2136393d4d711cb45ddb3d396e8d65b2810`; promotion test `8aefc88027da44cac437048b8bdd4ca73bfb354e12b790e4f7262aed847929da`; draft test `dbd2045075dcbf01c08baff91612b7180efaa736457b2ef45c0f0bb12a5542fa`. No redundant rerun after byte-identical integration.
+
+T-058 passes this deterministic release-control interruption contract. Approval token is a review fingerprint, not owner authentication or native-binary provenance. GitHub offers no CAS spanning tag/release/asset reads and publication; freeze all other tag/asset/release writers during preparation/promotion. Manual concurrent publication can expose an incomplete draft independently of these scripts; no script can undo it safely. No remote publication, destructive cleanup, merge or release-settings mutation was performed or authorized.
+
+### T-054 independent audit mode acceptance and observed false positive
+
+Producer fixtures are explicitly synthetic scenario data, not actual onboarding-agent runs; independent auditors are real fresh `omp` sessions. Installed original audit skill SHA-256 `9fb4899afe1c75c518eda3a02a3b9a068582bdb712a9ea58919d88a862fa8ca4`, producer skill `5b47b4c06307e1f32758adae103bd397c33e916ab62c168d3ed124923d22a83a`, validator `58864967f437056009bb759b8e2c453d1b3662b9de92a1acbc9e30a53dfd23a3`. Setup/emitter execution occurred before the read-only auditor phase; no audit response was fabricated.
+
+Full/label fixture: `/tmp/af054-coordinator-fixture/producer.jsonl`, SHA-256 `bbb50a880ae476f1cb58452f62953ca5fd244d1c131d8112cbea3e64b35167d3`; consumer `/tmp/harness-onboarding-htu7jstk`, commit `396a55b1306d7e13bfac3d5fde9e9dff12ffa5bc`. Capsule is structurally valid but carries disclosed synthetic boundary placeholders, runtime Unknown and a link describing a constant-output script as task status. Reissue fixture: `/tmp/af054-reissue-scenarios/evidence/original-producer.jsonl`, SHA-256 `451a19ea4ebe6f73741cbb34b4002d834030ba9dfab8ba60af7d42d8e66ee7a8`; consumer commit `90962f30a631866680e916196ca7eaac3ff844d7`. Real emitter output pins the five-line dry-run/persist/ready function and complete documentation destination; exact safe/unsafe/incomplete corrections have independent supplied digests. Creation/provenance: `/tmp/af054-scenarios-report.md` and `/tmp/af054-reissue-generator.py`.
+
+| Independent dispatch | Mode and observed result |
+| --- | --- |
+| `ctx_ba48fa2d777d` | Full audit: producer FAIL 1/5, output correctness Fail, H1 NO APPLY; explicit Unknown boundary vector, complete worksheet/counterexample, `AUDIT_COMPLETE`. Structural capsule validation was not mistaken for semantic or producer-quality proof. |
+| `ctx_fb0421d5df03` | Initial narrow label audit incorrectly returned PATCH_APPLY by weakening the exact capsule capability claim to mere path existence. This is an observed false positive, not a pass. |
+| `ctx_6a5362dcd0f9` | Concrete source/claim adjudication corrected that verdict to PATCH_NO_APPLY; no fixture/source changed. Initial source inspection had missed semantic meaning in the descriptive link label. |
+| `ctx_fa36b130dabe` | Original overbroad dry-run/persistence-failure hunk: PATCH_NO_APPLY; complete worksheet and independent source-derived counterexamples. |
+| `ctx_e655879062cd` | Exact safe correction: REISSUE_APPLY; preserved dry-run early return, callback-before-ready ordering and exception propagation; no claim of durable callback effects. |
+| `ctx_8df898dbc664` | Structurally complete but false correction: REISSUE_NO_APPLY; dry-run and raising-callback counterexamples. |
+| `ctx_133bc6503d70` | Incomplete correction: REISSUE_NO_APPLY; missing closing diff fence/H1 END marker prevented complete extraction; no fabricated repair. |
+
+Narrow reports state producer gates are not recomputed and use the requested mode markers; no APPLY disposition grants mutation authority. Complete reports retained outside consumers in `/tmp/af054-independent-reports/` with message-ID filenames and SHA-256 index, including the initial false positive. Report-delivery follow-ups only resend existing reports; they do not rerun audit/validator commands. Post-audit `python3 -B /tmp/af054-check-snapshot.py` passed complete reissue consumer/evidence equality; an independent in-memory comparison also passed all 281 full/label consumer entries and raw transcript digest. Snapshots include Git files, ignored/managed files, directory membership, modes and symlink targets; no runtime/ACL/power-loss claim.
+
+Permanent skill clarification now explicitly treats descriptive labels and capsule claims as semantic capability assertions, not empty navigation; a filename or sentinel alone cannot prove capability. New skill SHA-256 `b32fafe67388d15308545d4884f6d5806d47483bd8b3b078866d31a52e62cbc6`, manifest updated; `cargo build --locked --offline --release --bin agentfoundry` passed. Fresh installed-skill regression `ctx_0593c9a77bc6` uses a new frozen consumer `/tmp/harness-onboarding-4mebbs_n`, commit `db0970c4be6e7c30c66d53891b50fc639eefd141`, transcript digest `18541af0d8a16a6d9177914c2889a0c1914846fcd90618a5d9bd10f70033dd58`, with no prior adjudication supplied. The original dispatch stalled without a verdict; T-054 is not closed by the corrected earlier verdict alone. These scenarios do not certify real onboarding quality, deterministic model compliance or runtime isolation.
+
+Fresh regression completed after explicit owner-approved stop/retry of the provider-stalled dispatch. Orca confirmed original `ctx_0593c9a77bc6` process stopped (`ptyKilled: true`); same Task `task_a83bbdb6c010` retried as `ctx_e48bda590664`, using configured `omp` model `9router/cx/gpt-6.1-terra`, without model/account change. Auditor authenticated transcript, new installed skill digest and pinned revision; validator returned valid v2/machine_tool_output, bundle `2ab9e3d847f191179a12681ff091eeb25d36fde05d7a5a2307ea7a8992e7de9b`. It independently found that constant `ready` output proves no task-status capability, completed the worksheet/counterexample pass, and returned `PATCH_NO_APPLY` / `PATCH_ADMISSIBILITY_COMPLETE` without prior adjudication supplied. Message `msg_24a4962ce777` contains its report. Independent post-audit in-memory snapshot comparison passed all 281 entries and exact transcript digest. T-054 mode acceptance is passed; the initial false positive and provider failure remain part of evidence, not erased by retry. The five-host T-060 proof predates this skill-text clarification; only local rebuild/installed-skill regression covers the later payload revision.
+
+### T-042/T-046 local release rejection and transport acceptance
+
+`cargo build --locked --offline --features fault-injection --bin agentfoundry --target-dir target/release-negative` and `python3 -B tests/acceptance/release_negative.py target/release-negative/debug/agentfoundry` passed on Linux x64: 25 scenarios. The default build also compiled with `cargo build --locked --offline --bin agentfoundry --target-dir target/release-negative-default`. No production release or settings changed. The fault-only `AGENTFOUNDRY_RELEASE_HTTP_PORT` routes already trust-validated production URLs to a loopback HTTP server; redirects still undergo production URL validation. Non-fault builds compile out this routing. No TLS or live-negative provenance proof is claimed.
+
+Public installed-binary `status --check-updates` succeeded against a valid synthetic release; valid hash-verified `update --dry-run` executed exactly one distribution probe. Asset hash/size errors, wrong/invalid-UTF8 checksum sidecars, invalid source/payload/tag/handoff metadata, duplicate API inventory and pointer/metadata tag mismatch rejected with zero candidate launches. Version/source/payload identity mismatches, learned only by executing the hash-verified `distribution --json`, each executed exactly that one probe and rejected with INTEGRITY_FAILURE before handoff/activation. An external append-only launch log and recursive consumer snapshot (contents, membership, modes and symlink targets, including selected binary/control files) enforce the split oracle. The executable is a synthetic Unix Python probe, not a published candidate; Windows requires a compiled executable fixture.
+
+Malformed API JSON returned NETWORK_ERROR; malformed metadata JSON retained the existing INVALID_STATE contract. HTTP 404 returned RELEASE_UNAVAILABLE; HTTP 503, closed/truncated transport, untrusted/looping redirects and a server delivering one body byte then delaying 32 seconds returned NETWORK_ERROR. The slow-body observation took 31.65 seconds against the unchanged 30-second resolve deadline. Every scenario checked exact command-result fields/types, a single JSON document, status, exit 0/5/7 and unchanged consumer snapshot; no handoff or activation occurred. T-042 local negative acceptance is implemented; T-046 full update/session/native envelopes remain open, and no native Windows/macOS/arm64 run is claimed.
+
+Hash-mismatch launch-oracle correction: the initial fixture replaced the script's final newline and could fail Python parsing before logging. It now changes only a byte in a trailing comment, preserving size and executable behavior. The harness directly executes that altered fixture and asserts a successful distribution probe plus its launch-log entry, then resets the log before the rejected download. Rerun `python3 -B tests/acceptance/release_negative.py target/release-negative/debug/agentfoundry` passed all 25 scenarios; wrong-hash download logged zero launches, and slow-body deadline returned NETWORK_ERROR after 31.63 seconds. The direct fixture self-check is outside the consumer and is not candidate execution by the updater.
