@@ -25,7 +25,48 @@ Development build, not v1. Scope and completion gates remain proposal §24. Targ
 
 ## Release blockers
 
-All unverified PAR/T rows; macOS, Linux arm64 and Windows native runners; public release owner/trust endpoint; owner license approval before public release. No external settings changed; no publication authorized.
+Current must-pass blockers: T-054 (independent audit modes) is in progress. T-058 local draft/promotion interruption proof and safety review passed; GitHub's non-atomic multi-call boundary requires freezing other tag/asset/release writers. T-060 passed all 8 packaged groups on each of five native hosts in CI run 45108364019 at commit `2035c789f643a71f12d4609adce5c5655d3f5a8c`; downloaded artifacts match their recorded hashes. This is development packaging, not live bootstrap or exhaustive crash proof. PAR-16/T-020..T-028, PAR-18/T-037..T-038, PAR-20, PAR-21/T-042 and T-046 remain in progress. T-006 passed Bash/Windows candidate refusals; T-007 passed Linux crash rollback and Bash/Windows successful override; T-009 passed native PowerShell real-console Override dry-run. T-044/T-045 have Linux runnable proof. Live bootstrap is verified only on Linux x64 and Windows x64.
+
+Authorization: production `v0.1.0` and `v0.1.1` were published only after explicit owner approval. No further publication, remote settings change, or v1 readiness claim is authorized; each new release requires explicit owner approval plus license/notice confirmation. No external settings were changed by this review.
+
+## AF-018 current gate assessment
+
+Basis: existing parity/test mapping and recorded public evidence, reviewed on 2026-11-18. This is an evidence-to-claims review, not a test rerun; "verified" below means a recorded public acceptance exists, not that its result is independently re-authenticated here.
+
+Verified release-path evidence (do not re-run as open gates):
+
+- Production publication: `v0.1.0` (tag commit `1e36498dfacf81a586c4c99675776f7425e90a9f`; CI run 43559364430, candidate 43559365842, draft 43559650510) and `v0.1.1` (tag commit `b9395577fabcc22ccde9c2c6b4be5691e92f7239`; CI run 43795471625, candidate 43795472934, draft 43797469926), both after explicit owner approval. See the two production sections near the end of this file and `scripts/verify-release-bundle.py`.
+- Live bootstrap/update: unmodified `scripts/install.sh` (Linux x64) and `scripts/install.ps1` (Windows PowerShell) performed HTTPS dry-run, install, status, doctor and same-version update; `tests/acceptance/published_upgrade.py` then verified `v0.1.0`→`v0.1.1` on Linux x64 and native Windows/PowerShell, exact activated asset digests, preserved local edits and idempotent recovery.
+- Windows recovery: `tests/acceptance/published_update_recovery.py` passed nine production-candidate process-exit scenarios against the unchanged production endpoint and stable `v0.1.1` asset: prepared/journal rollback, committed/completion recovery, interrupted rollback/recovered, and two activation-repair interruptions. This is process-exit evidence, not power-loss or arbitrary-termination proof.
+- Windows replacement: `tests/acceptance/windows_replacefile.py` covered constructed `ReplaceFileW` 1175/1176/1177 layouts, real WinError 32 sharing denial, and public recovery; `tests/acceptance/windows_launcher.py` separately exercised the real `fs::rename` sharing-denial path with a development candidate. Production uses Rust `fs::rename`, not `ReplaceFileW`; constructed layouts are not actual OS-induced 1176/1177 outcomes.
+- Native CI: `.github/workflows/ci.yml` defines and exercised five hosted native hosts (macOS Intel/arm64, Linux x64/arm64, Windows x64). CI smoke is build/acceptance evidence, not live HTTPS bootstrap or the complete native crash/session matrix.
+- Windows conflict-session crash matrix: native Python/MSVC release binaries passed all 38 invocations (19 file, 19 block), including per-operation apply/rollback, RollingBack/Recovered and two activation-repair boundaries. Separately, the updated harness (`bb46542d…`) passed file/block absent-path and synthetic metadata refusals natively on Windows without rerunning the matrix; see `docs/milestone-evidence.md` for commands, hashes and scope.
+- T-044/T-045: Linux `check-repo-pin` proves cross-repository executable containment; `check-release-pointer` stages real published v0.1.0, changes a local fixture pointer to v0.1.1, then proves public continuation activates the exact pinned v0.1.0. Test transport is fault-injection-only; default compile-out and stable-feature rejection verified. No production pointer or release changed.
+
+Must-pass before release (actionable, currently open):
+
+- [x] T-006/T-007: Bash/Windows corrupt and missing candidate refusals preserve consumer snapshots; Linux override after stable install rolls back three precommit process exits with retained evidence and repeat recovery, then succeeds without MissingManaged. Native Windows override crash rollback remains unverified.
+- [x] T-009: native PowerShell real-console Override dry-run preserved full installed/fresh consumer snapshots, control state and outside sentinel; non-terminal input refused. Local transport with current-source candidate and independent staging bundle; no live HTTPS claim for this interactive check.
+- [x] T-044/T-045: Linux public-command repository containment and local pointer-transition/pinned-candidate behavior proved with runnable checks. Native Windows/macOS variants and live production pointer-transition timing are not claimed; see milestone evidence.
+- [ ] T-054: independent audit full/patch/reissue behavior and admissibility without self-approval remains open. Installed-validator regression fixes require the transcript's expected SHA-256 and reject a prior completed turn's stale machine bundle; release build and 23 evidence tests passed. Scenario production and independent `omp` audit sessions are pending; validator success is not audit-mode proof.
+- [x] T-058: reviewed local `release_promotion.py` passed 11 draft/upload/verification scenarios; `promote_release.py` passed 11 approval/publish/interruption scenarios plus read-only approval and real oversized-response subprocess transport. Actual downloads are bounded; explicit tag refs and release/asset identity are reread. Drafts are retained, never automatically deleted; promotion requires exact identity/bytes approval and authenticated write permission. Workflow controller is pinned to its default-branch workflow commit. No GitHub release was mutated; no cross-call CAS or uncooperative-writer atomicity is claimed. Freeze other tag/asset/release writers throughout preparation/promotion.
+- [x] T-060: [CI run 45108364019](https://github.com/anquocviet/agent-foundry/actions/runs/45108364019), commit `2035c789f643a71f12d4609adce5c5655d3f5a8c`, passed 8 packaged-artifact groups on macOS x64/arm64, Linux x64/arm64 and Windows x64 (40/40). Downloaded binary SHA-256 values match identity and native proof; all share payload `c250bbbe690e6075cbb2ce558378beb192fa7a29ca1f8972280e27443543abf4`. Development package proof only; live bootstrap and exhaustive crash coverage remain separate gates.
+- [ ] PAR-16/T-020..T-028: complete conflict-session tamper/crash/native matrix. Linux and Windows enumerated file/block crash sweeps and separate updated-harness absent-path/synthetic metadata refusals passed; macOS/arm64 coverage remains open. Local development fixtures do not prove published-stable provenance.
+- [ ] PAR-18/T-037..T-038: automatic activation repair across the full binary-failure matrix, repository-bound executable enforcement, and offline repair without a retained session.
+- [ ] PAR-20: macOS/Linux arm64 live bootstrap and remaining platform parity. Native PowerShell interactive Override dry-run is now verified by T-009; this does not close the broader platform gate.
+- [ ] PAR-21/T-042/T-046 residual: published-metadata tamper/transport-error matrix and controlled slow-server timeout. Positive published-candidate acquisition/execution is covered by the `v0.1.1` upgrade above; T-042/T-046 remain in progress for the negative matrix.
+- [ ] AF-001/AF-002: complete architecture, model and schema contracts; broader AF-005 race/platform limits remain documented.
+- [ ] AF-018 risk review sign-off, license/notice confirmation and explicit owner publication authorization.
+
+Hardening/limitations to accept or close explicitly (not evidence for the rows above):
+
+- Power-loss durability, arbitrary external termination, ACL/ownership/special bits, Windows stream/ACL inheritance and directory preimages.
+- Uncooperative-writer/symlink-swap isolation; locking remains cooperative.
+- External large saved-plan storage; inline plans remain bounded at 16 MiB.
+- Actual OS-induced `ReplaceFileW` 1176/1177 outcomes and stable published-candidate tamper coverage.
+- Additional exhaustive sweeps beyond the mapped T-020..T-038 rows, including broad per-operation rollback and complete migration crash coverage.
+
+No item above is completed by this documentation review. Historical checkpoint sections below remain as recorded.
 
 ## Continuation checkpoint
 
