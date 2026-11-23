@@ -7,7 +7,7 @@
       "target": ".agents/skills/agentfoundry-audit/SKILL.md",
       "ownership": "managed_file",
       "mode": 420,
-      "sha256": "9fb4899afe1c75c518eda3a02a3b9a068582bdb712a9ea58919d88a862fa8ca4"
+      "sha256": "b32fafe67388d15308545d4884f6d5806d47483bd8b3b078866d31a52e62cbc6"
     },
     {
       "logical_id": ".agents/skills/audit-onboarding-proposal/agents/openai.yaml",

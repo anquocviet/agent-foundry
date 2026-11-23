@@ -257,6 +257,12 @@ For each displayed hunk:
    configuration, resource, or readiness completeness; and
 10. reject any new cleanup or product obligation lacking authority.
 
+Descriptive link labels and capsule claim text are semantic claims too. A valid
+target path or suggestive filename proves location, not the advertised capability.
+Do not weaken a claim such as “task status is implemented here” into “this file
+exists”, or treat its link label as empty navigation. Verify that capability
+against the implementation; constant sentinel output alone does not establish it.
+
 For managed-marker replacement, compare the full displayed replacement
 byte-for-byte with the checksum-verified base content. A missing heading or
 line makes the hunk **NO APPLY**.
