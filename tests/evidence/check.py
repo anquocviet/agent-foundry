@@ -329,8 +329,8 @@ class OnboardingEvidenceTests(unittest.TestCase):
         for skill in skills.iterdir():
             with self.subTest(skill=skill.name):
                 self.assert_explicit_skill_policy(
-                    (skill / "agents/openai.yaml").read_text(),
-                    (skill / "SKILL.md").read_text(),
+                    (skill / "agents/openai.yaml").read_text(encoding="utf-8"),
+                    (skill / "SKILL.md").read_text(encoding="utf-8"),
                 )
 
     def test_implicit_invocation_policy_is_rejected(self):
