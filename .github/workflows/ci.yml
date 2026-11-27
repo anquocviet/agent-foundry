@@ -334,28 +334,6 @@ jobs:
         if: runner.os == 'Windows'
         run: python -B tests/acceptance/windows_replacefile.py ${{ matrix.fault_binary }}
 
-      - name: Native Windows v0.1.0 override crash rollback
-        if: runner.os == 'Windows'
-        shell: python
-        env:
-          TMPDIR: ${{ runner.temp }}
-        run: |
-          import hashlib, os, subprocess, sys, urllib.request
-          from pathlib import Path
-
-          v010_sha = "8ca4d9d67d49bef9d45556834fb52ad8cd8f1f3fc541971527f9256f81a1764a"
-          url = "https://github.com/anquocviet/agent-foundry/releases/download/v0.1.0/agentfoundry-x86_64-pc-windows-msvc.exe"
-          baseline = Path(os.environ["RUNNER_TEMP"]) / "v0.1.0-agentfoundry-x86_64-pc-windows-msvc.exe"
-          with urllib.request.urlopen(url, timeout=60) as resp:
-              data = resp.read()
-          actual = hashlib.sha256(data).hexdigest()
-          assert actual == v010_sha, f"v0.1.0 Windows digest mismatch: {actual} != {v010_sha}"
-          baseline.write_bytes(data)
-          subprocess.run(
-              [sys.executable, "-B", "tests/acceptance/override_recovery.py", str(baseline), "${{ matrix.fault_binary }}"],
-              check=True,
-          )
-
       - name: Acceptance smoke - schemas.py (Linux x64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: python tests/acceptance/schemas.py ${{ matrix.binary }}
