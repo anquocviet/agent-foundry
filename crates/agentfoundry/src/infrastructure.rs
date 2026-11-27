@@ -209,6 +209,12 @@ pub fn snapshot(
             presence,
         });
     }
+    if generation != 0 && state_digest.is_none() {
+        return Err(Failure::new(
+            "WORKSPACE_DRIFT",
+            "manifest disappeared from snapshot request",
+        ));
+    }
     let snapshot = WorkspaceSnapshot {
         schema: "agentfoundry.snapshot/v1".into(),
         root_identity,

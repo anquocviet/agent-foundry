@@ -68,3 +68,5 @@ Repair transactions preserve the installed manifest rather than changing its gen
 After a committed conflict session, `update --abort` refuses while its pinned executable is missing, altered or non-executable; it retains candidate evidence. Clean online updates use an independent activation record: recover an interrupted core journal first, then run `recover` again to preview or complete activation. Unknown executable bytes are retained, never overwritten.
 
 If `recover` replaces the executable but its subsequent identity query, JSON parsing, identity validation or record cleanup fails, the error reports `mutation: applied`; the activation record remains for inspection/retry. If no replacement occurred, an identity-query failure reports `mutation: none`.
+
+Before core commit, activation cancellation requires the installed executable to match the recorded pre-update digest and Unix mode. A missing, changed or permission-drifted executable blocks cancellation and retains the activation record; restore the verified original before retrying.

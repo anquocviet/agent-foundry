@@ -194,6 +194,23 @@ pub(crate) fn recover_locked(root: &Path, dry: bool) -> Result<serde_json::Value
         .ok_or_else(|| Failure::new("RECOVERY_BLOCKED", "installed state missing"))?;
     let hash = fs::digest(&state);
     if hash == record.before_state {
+        let active = fs::read(root, binary_path(), 128 * 1024 * 1024)?;
+        if active
+            .as_ref()
+            .is_none_or(|bytes| fs::digest(bytes) != record.before_binary)
+        {
+            return Err(Failure::new(
+                "RECOVERY_BLOCKED",
+                "installed executable differs from activation witness",
+            ));
+        }
+        #[cfg(unix)]
+        if crate::existing_mode(root, binary_path(), 0)? != record.mode {
+            return Err(Failure::new(
+                "RECOVERY_BLOCKED",
+                "executable permission changed; retain activation evidence",
+            ));
+        }
         if !dry {
             fs::remove(root, RECORD)?;
         }
