@@ -219,6 +219,11 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: python tests/acceptance/crashes.py ${{ matrix.fault_binary }}
 
+      - name: Acceptance smoke - override_recovery.py
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python -B tests/acceptance/override_recovery.py "${{ matrix.binary }}" "${{ matrix.fault_binary }}"
+
       - name: Native macOS and Linux arm64 conflict-session crash matrix
         if: runner.os == 'macOS' || matrix.target == 'aarch64-unknown-linux-gnu'
         shell: bash
@@ -275,6 +280,44 @@ jobs:
           "$root/scripts/bin/agentfoundry" doctor --directory "$root" --json
           "$root/scripts/bin/agentfoundry" update --directory "$root" --json
 
+      - name: Native macOS and Linux arm64 cross-version published upgrade (v0.1.0 -> v0.1.1)
+        if: runner.os == 'macOS' || matrix.target == 'aarch64-unknown-linux-gnu'
+        shell: python
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          import hashlib, os, subprocess, sys, urllib.request
+          from pathlib import Path
+
+          target = "${{ matrix.target }}"
+          digests = {
+              "x86_64-apple-darwin": (
+                  "32bbe29dc6f2649786db8b964bbf249affbed0aaa5a0dbfbb2f959c6d3a14d98",
+                  "c4243074309968a890b3ff2b7a4e96a110a860d4201f5512784c5d0847a5ff9e",
+              ),
+              "aarch64-apple-darwin": (
+                  "d10a02b40e99617fd0b8de57c64dc6ccef8a5499e89c121f489f2b3621bd7700",
+                  "25e38a6da3d934ee3d06f7cad16e37ebdfabc84400bae08f23c6d3b0f11e7f5a",
+              ),
+              "aarch64-unknown-linux-gnu": (
+                  "186d43c9c90558c61f75a9df8ab0daadd485c08cea7d9987bcd810163f756fd9",
+                  "ad92f185b385b7f43647a30ca02340551945b0b89670535ce6495050f4413b7c",
+              ),
+          }
+          v010_sha, v011_sha = digests[target]
+          url = f"https://github.com/anquocviet/agent-foundry/releases/download/v0.1.0/agentfoundry-{target}"
+          baseline = Path(os.environ["RUNNER_TEMP"]) / f"v0.1.0-agentfoundry-{target}"
+          with urllib.request.urlopen(url, timeout=60) as resp:
+              data = resp.read()
+          actual = hashlib.sha256(data).hexdigest()
+          assert actual == v010_sha, f"v0.1.0 digest mismatch for {target}: {actual} != {v010_sha}"
+          baseline.write_bytes(data)
+          baseline.chmod(0o755)
+          subprocess.run(
+              [sys.executable, "-B", "tests/acceptance/published_upgrade.py", str(baseline), "0.1.1", v011_sha],
+              check=True,
+          )
+
       - name: Acceptance smoke - interactive.py (POSIX)
         if: runner.os != 'Windows'
         env:
@@ -290,6 +333,28 @@ jobs:
       - name: Acceptance smoke - windows_replacefile.py (Windows)
         if: runner.os == 'Windows'
         run: python -B tests/acceptance/windows_replacefile.py ${{ matrix.fault_binary }}
+
+      - name: Native Windows v0.1.0 override crash rollback
+        if: runner.os == 'Windows'
+        shell: python
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          import hashlib, os, subprocess, sys, urllib.request
+          from pathlib import Path
+
+          v010_sha = "8ca4d9d67d49bef9d45556834fb52ad8cd8f1f3fc541971527f9256f81a1764a"
+          url = "https://github.com/anquocviet/agent-foundry/releases/download/v0.1.0/agentfoundry-x86_64-pc-windows-msvc.exe"
+          baseline = Path(os.environ["RUNNER_TEMP"]) / "v0.1.0-agentfoundry-x86_64-pc-windows-msvc.exe"
+          with urllib.request.urlopen(url, timeout=60) as resp:
+              data = resp.read()
+          actual = hashlib.sha256(data).hexdigest()
+          assert actual == v010_sha, f"v0.1.0 Windows digest mismatch: {actual} != {v010_sha}"
+          baseline.write_bytes(data)
+          subprocess.run(
+              [sys.executable, "-B", "tests/acceptance/override_recovery.py", str(baseline), "${{ matrix.fault_binary }}"],
+              check=True,
+          )
 
       - name: Acceptance smoke - schemas.py (Linux x64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'

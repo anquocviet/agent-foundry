@@ -21,3 +21,4 @@ python3 -B tests/acceptance/workflow_examples.py
 python3 -m unittest discover -s tests/evidence -p check.py -v
 cargo build --locked --features fault-injection --target-dir target/fault-injection
 python3 tests/acceptance/crashes.py target/fault-injection/debug/agentfoundry
+python3 -B tests/acceptance/override_recovery.py "$binary" target/fault-injection/debug/agentfoundry
