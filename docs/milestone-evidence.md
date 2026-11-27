@@ -517,3 +517,23 @@ On `Linux arm64` (`140407987876`), `macOS x64` (`140407988386`), and `macOS arm6
   - macOS arm64: `25e38a6da3d934ee3d06f7cad16e37ebdfabc84400bae08f23c6d3b0f11e7f5a`
 
 Limits: `session_matrix.py` uses local development candidates rather than published-stable provenance, and absent-path/stable-metadata tampering and the online session matrix remain open under PAR-16. Cross-version published upgrade (`v0.1.0` to `v0.1.1`) remains verified on Linux x64 and Windows x64 only (not macOS or Linux arm64); interactive PowerShell used local transport; native Windows override crash rollback and remaining PAR-16/PAR-18/PAR-20/T-046/AF-001/AF-002/AF-018 gates remain open.
+
+### Five-host CI run 46023478601: PAR-20 five-platform published upgrade and override crash rollback
+
+[CI run 46023478601](https://github.com/anquocviet/agent-foundry/actions/runs/46023478601) ran on PR #5 (`verify/par20-upgrade-and-windows-override`), head commit `4d58b55b1999e25709728908cdf94ae9c7e8cdec`, payload digest `e6526a479509d23ee3f1cb853dc5cf7c9e38b2055814b4c4de129d3281f2e9a1`. After an initial `macOS arm64` attempt (`140588770675`) exited 7 (`RELEASE_UNAVAILABLE`) on `status --check-updates` during live stable bootstrap, a rerun of failed jobs (`gh run rerun 46023478601 --failed`) succeeded across all five native hosts:
+
+| Target | Final Job ID | Release binary SHA-256 |
+| --- | --- | --- |
+| `x86_64-unknown-linux-gnu` | `140619739384` | `b629c9f58e3c569e3e300e32f146fb0a75627bbb65f5e7609019b6ba6014aeaf` |
+| `aarch64-unknown-linux-gnu` | `140619663420` | `0cc15cb4b4959f885b63b423ef2a961adfc731567ba39b31abd139ff7525fbf3` |
+| `x86_64-apple-darwin` | `140619739059` | `e07ef2e3b2343d86e418a47603ca2e5ced6df79992d51971e16d76922342bbdf` |
+| `aarch64-apple-darwin` | `140619661508` | `1aa40effcfca5e827144513c6d27ae700b09bce947bd05f7b70aac8e6cd3e56b` |
+| `x86_64-pc-windows-msvc` | `140619665389` | `a56676d0f8a0a636890c5f885d019c88332f93f9d009340de8c557d44f518d58` |
+
+Prior to push, the local Linux x64 premerge gate `env PATH="$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" bash scripts/validate-premerge.sh` also passed on the added `tests/acceptance/override_recovery.py` check (`override crash rollback passed (5 precommit checkpoints, baseline=0.1.1, platform=linux)`).
+
+Two new PAR-20 verification matrices passed natively in run `46023478601`:
+- **Three-host cross-version published upgrade (`v0.1.0` → `v0.1.1`)**: `tests/acceptance/published_upgrade.py` downloaded the pinned published `v0.1.0` binaries and upgraded via HTTPS to published `v0.1.1` on `aarch64-unknown-linux-gnu` (activating `ad92f185b385b7f43647a30ca02340551945b0b89670535ce6495050f4413b7c`), `x86_64-apple-darwin` (`c4243074309968a890b3ff2b7a4e96a110a860d4201f5512784c5d0847a5ff9e`), and `aarch64-apple-darwin` (`25e38a6da3d934ee3d06f7cad16e37ebdfabc84400bae08f23c6d3b0f11e7f5a`), preserving local edits and verifying idempotent recovery (`production 0.1.0 -> 0.1.1: local edits preserved, digest matched, recovery idempotent`). Combined with prior Linux x64 and Windows x64 `published_upgrade.py` runs, cross-version `v0.1.0` → `v0.1.1` upgrade is now verified on all five platforms.
+- **Five-host T-007 override crash rollback (`tests/acceptance/override_recovery.py`)**: all five native hosts (including `x86_64-pc-windows-msvc`, `platform=win32`) passed five pre-commit crash checkpoints (`journal-durable`, `applied:docs/agentfoundry/WORKFLOW.md`, `applied:docs/agentfoundry/README.md`, `applied:CLAUDE.md`, `applied:scripts/bin/agentfoundry(.exe)`) using the current-source release binary (`baseline=0.1.1`, matching current `payload_digest`) and current-source fault-injection binary in consumer directories containing spaces. On Windows x64, `recover --dry-run`, `recover`, repeat `recover`, `update --offline`, `status`, and `doctor` all executed through the installed `scripts/agentfoundry.ps1` PowerShell launcher; rollback restored exact pre-crash working/control bytes, preserved private docs/edits/ignored rules and intended absence of deleted files, retained backup evidence, and completed subsequent `--override --claude` without `MissingManaged`.
+
+Limits: `override_recovery.py` provides process-exit crash evidence (not power-loss or arbitrary external termination) and uses current-source `0.1.1` development baselines matching the current `payload_digest`; T-009 native PowerShell interactive dry-run remains local-transport proof; non-PAR-20 release gates (`PAR-16`, `PAR-18`, `PAR-21`, full `T-046`, `AF-001/AF-002`, and `AF-018`) remain open.
