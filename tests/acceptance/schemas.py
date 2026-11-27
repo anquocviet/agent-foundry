@@ -54,13 +54,23 @@ for field in ('version', 'source'):
     bad[field] = ''
     assert list(installation_validator.iter_errors(bad)), field
 snapshot_validator = Draft202012Validator(json.loads((root / 'schemas/snapshot.json').read_text()))
-snapshot = {'schema': 'agentfoundry.snapshot/v1', 'root_identity': '/fixture', 'generation': 1,
+snapshot = {'schema': 'agentfoundry.snapshot/v1', 'root_identity': '/fixture', 'generation': 0,
             'config_digest': None, 'state_digest': None,
             'entries': [{'path': 'missing.md', 'presence': {'kind': 'absent'}},
                         {'path': 'local.md', 'presence': {'kind': 'file', 'digest': 'a' * 64, 'mode': 420}}]}
 snapshot['entries'].extend({'path': path, 'presence': {'kind': 'absent'}} for path in
                           ('.agentfoundry/config.json', '.agentfoundry/state/manifest.json'))
 snapshot_validator.validate(snapshot)
+bad = copy.deepcopy(snapshot)
+bad['generation'] = 1
+assert list(snapshot_validator.iter_errors(bad)), 'generation without state'
+present = copy.deepcopy(snapshot)
+present['generation'] = 1
+present['state_digest'] = 'b' * 64
+present['entries'][-1]['presence'] = {'kind': 'file', 'digest': 'b' * 64, 'mode': 420}
+snapshot_validator.validate(present)
+present['generation'] = 0
+assert list(snapshot_validator.iter_errors(present)), 'state without generation'
 for control in ('.agentfoundry/config.json', '.agentfoundry/state/manifest.json'):
     bad = copy.deepcopy(snapshot)
     bad['entries'] = [entry for entry in bad['entries'] if entry['path'] != control]

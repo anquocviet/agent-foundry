@@ -1,6 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
+  "if": {"properties": {"generation": {"const": 0}}, "required": ["generation"]},
+  "then": {"properties": {"state_digest": {"type": "null"}}},
+  "else": {"properties": {"state_digest": {"type": "string"}}},
   "properties": {
     "schema": {
       "const": "agentfoundry.snapshot/v1"

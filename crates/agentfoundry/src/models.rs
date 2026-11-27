@@ -273,6 +273,9 @@ impl WorkspaceSnapshot {
         {
             return Err("invalid snapshot root or resource limit".into());
         }
+        if (self.generation == 0) != self.state_digest.is_none() {
+            return Err("snapshot generation disagrees with manifest presence".into());
+        }
         for hash in [&self.config_digest, &self.state_digest]
             .into_iter()
             .flatten()
@@ -424,7 +427,7 @@ mod tests {
                 root_identity: "fixture".into(),
                 generation: 2,
                 config_digest: None,
-                state_digest: None,
+                state_digest: Some("c".repeat(64)),
                 entries: vec![
                     SnapshotEntry {
                         path: RelativePath::new("AGENTS.md").unwrap(),
@@ -443,7 +446,10 @@ mod tests {
                     },
                     SnapshotEntry {
                         path: RelativePath::new(".agentfoundry/state/manifest.json").unwrap(),
-                        presence: Presence::Absent,
+                        presence: Presence::File {
+                            digest: "c".repeat(64),
+                            mode: 0o644,
+                        },
                     },
                 ],
             },
@@ -454,6 +460,19 @@ mod tests {
                 upstream: Some("0".repeat(64)),
             }],
         }
+    }
+    #[test]
+    fn snapshot_generation_requires_matching_manifest_presence() {
+        let mut snapshot = session().frozen;
+        WorkspaceSnapshot::parse(&serde_json::to_vec(&snapshot).unwrap()).unwrap();
+        snapshot.generation = 0;
+        assert!(WorkspaceSnapshot::parse(&serde_json::to_vec(&snapshot).unwrap()).is_err());
+        snapshot.generation = 2;
+        snapshot.state_digest = None;
+        snapshot.entries[3].presence = Presence::Absent;
+        assert!(WorkspaceSnapshot::parse(&serde_json::to_vec(&snapshot).unwrap()).is_err());
+        snapshot.generation = 0;
+        WorkspaceSnapshot::parse(&serde_json::to_vec(&snapshot).unwrap()).unwrap();
     }
     #[test]
     fn session_requires_exact_full_input_set() {

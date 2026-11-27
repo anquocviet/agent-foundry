@@ -219,6 +219,62 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: python tests/acceptance/crashes.py ${{ matrix.fault_binary }}
 
+      - name: Native macOS and Linux arm64 conflict-session crash matrix
+        if: runner.os == 'macOS' || matrix.target == 'aarch64-unknown-linux-gnu'
+        shell: bash
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          cargo build --locked --example check-session
+          candidate="$RUNNER_TEMP/session-candidate"
+          python - "$candidate" <<'PY'
+          import hashlib, json, shutil, sys
+          from pathlib import Path
+
+          candidate = Path(sys.argv[1])
+          shutil.copytree('.', candidate, ignore=shutil.ignore_patterns('.git', 'target', 'dist'))
+          manifest_path = candidate / 'payload/manifest.json'
+          manifest = json.loads(manifest_path.read_text())
+          changes = {'AGENTS.md': ('## AgentFoundry', '## AgentFoundry upstream'),
+                     'docs/agentfoundry/WORKFLOW.md': ('# Repository Understanding', '# Repository Understanding upstream')}
+          for entry in manifest['entries']:
+              if entry['target'] in changes:
+                  path = candidate / entry['source']
+                  before, after = changes.pop(entry['target'])
+                  content = path.read_text()
+                  assert content.count(before) == 1
+                  content = content.replace(before, after, 1)
+                  path.write_text(content)
+                  entry['sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+          assert not changes, changes
+          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+          cargo build --release --locked --manifest-path "$candidate/Cargo.toml"
+          python tests/acceptance/session_matrix.py target/debug/examples/check-session \
+            "${{ matrix.binary }}" "$candidate/target/release/agentfoundry" "${{ matrix.fault_binary }}"
+
+      - name: Native macOS and Linux arm64 live stable bootstrap
+        if: runner.os == 'macOS' || matrix.target == 'aarch64-unknown-linux-gnu'
+        shell: bash
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/live-bootstrap-consumer"
+          bash scripts/install.sh --directory "$root" --dry-run --claude --json
+          test ! -e "$root"
+          bash scripts/install.sh --directory "$root" --claude --json
+          "$root/scripts/bin/agentfoundry" status --directory "$root" --check-updates --json > "$RUNNER_TEMP/live-status.json"
+          python - "$RUNNER_TEMP/live-status.json" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1]))['data']
+          assert data['release_observation']['repository'] == 'anquocviet/agent-foundry'
+          assert data['release_observation']['metadata']['tag']
+          PY
+          "$root/scripts/bin/agentfoundry" doctor --directory "$root" --json
+          "$root/scripts/bin/agentfoundry" update --directory "$root" --json
+
       - name: Acceptance smoke - interactive.py (POSIX)
         if: runner.os != 'Windows'
         env:

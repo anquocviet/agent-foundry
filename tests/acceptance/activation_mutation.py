@@ -40,6 +40,32 @@ with tempfile.TemporaryDirectory(prefix='af-activation-mutation-') as directory:
               'release': None, 'mode': 0o755}
     record_path = root / '.agentfoundry/runtime/activation.json'
     record_path.write_text(json.dumps(record))
+    # A pre-commit cancellation must not discard the only recovery witness if
+    # the installed executable is absent, foreign, or has changed permissions.
+    state_path.write_bytes(original)
+    for replacement in (None, b'foreign executable'):
+        if target.exists():
+            target.unlink()
+        if replacement is not None:
+            target.write_bytes(replacement)
+            target.chmod(0o755)
+        for args in (('recover', '--dry-run'), ('recover',)):
+            result, response = run(*args)
+            assert result.returncode != 0 and response['mutation'] == 'none', response
+            assert record_path.exists() and state_path.read_bytes() == original
+            assert (target.read_bytes() if target.exists() else None) == replacement
+    target.write_bytes(old_binary)
+    target.chmod(0o755)
+    if sys.platform != 'win32':
+        target.chmod(0o700)
+        result, response = run('recover')
+        assert result.returncode != 0 and response['mutation'] == 'none', response
+        assert record_path.exists() and target.read_bytes() == old_binary
+        target.chmod(0o755)
+    result, response = run('recover')
+    assert result.returncode == 0 and not record_path.exists(), response
+    state_path.write_bytes(target_state)
+    record_path.write_text(json.dumps(record))
     target.unlink()
     result, response = run('recover')
     assert result.returncode != 0 and response['mutation'] == 'applied', response

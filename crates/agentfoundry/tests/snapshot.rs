@@ -72,6 +72,13 @@ fn frozen_inputs_detect_preserved_file_absence_config_and_mode_drift() {
         frozen.state_digest,
         Some(agentfoundry::infrastructure::digest(&manifest))
     );
+    std::fs::remove_file(root.join(".agentfoundry/state/manifest.json")).unwrap();
+    assert_eq!(
+        verify_snapshot(&root, &frozen).unwrap_err().code,
+        "WORKSPACE_DRIFT"
+    );
+    std::fs::write(root.join(".agentfoundry/state/manifest.json"), &manifest).unwrap();
+    verify_snapshot(&root, &frozen).unwrap();
     let mut changed: serde_json::Value = serde_json::from_slice(&manifest).unwrap();
     changed["generation"] = serde_json::json!(3);
     std::fs::write(

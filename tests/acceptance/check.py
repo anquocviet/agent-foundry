@@ -2,14 +2,15 @@
 """Run with packaged binary path; only synthetic temporary consumers are mutated."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 
 binary = Path(sys.argv[1]).resolve()
-def run(root, *args, exit=0):
-    p = subprocess.run([str(binary), *args, '--directory', str(root), '--json'], capture_output=True, text=True)
+def run(root, *args, exit=0, env=None):
+    p = subprocess.run([str(binary), *args, '--directory', str(root), '--json'], capture_output=True, text=True, env=env)
     assert p.returncode == exit, (args, p.returncode, p.stdout, p.stderr)
     envelope = json.loads(p.stdout)
     assert envelope['schema'] == 'agentfoundry.command-result/v1'
@@ -124,7 +125,16 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-acceptance-') as temp:
     run(root, 'update', '--offline', exit=3)
     assert snapshot(root) == missing_block
     entrypoint.write_bytes(entrypoint_bytes)
-    result = run(root, 'update', exit=6 if sys.platform == 'win32' else 7)
+    offline_env = {
+        **os.environ,
+        'https_proxy': 'http://127.0.0.1:9',
+        'HTTPS_PROXY': 'http://127.0.0.1:9',
+        'http_proxy': 'http://127.0.0.1:9',
+        'HTTP_PROXY': 'http://127.0.0.1:9',
+        'NO_PROXY': '',
+        'no_proxy': '',
+    }
+    result = run(root, 'update', exit=6 if sys.platform == 'win32' else 7, env=offline_env)
     if sys.platform == 'win32':
         assert result['code'] == 'MISSING_CAPABILITY'
     before = snapshot(root)
