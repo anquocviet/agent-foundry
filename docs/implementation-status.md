@@ -80,6 +80,10 @@ Activation recovery records now have a versioned JSON schema and the public reco
 
 Run 46107503244 finished with macOS x64/arm64, Linux x64 and Windows x64 jobs successful. Linux arm64 failed before tests because the runner's partially installed Rust 1.90 toolchain conflicted on `bin/cargo-clippy`; the workflow now isolates its rustup home for a fresh installation. This configuration change awaits a native run.
 
+CI run [46130126223](https://github.com/anquocviet/agent-foundry/actions/runs/46130126223), commit `02a782ea38e71060927e3929932bf7476d010a0d`, passed activation schema/recovery and override crash checks on all five hosts, and the session crash matrix on macOS x64/arm64 and Linux arm64. Live production v0.1.0→v0.1.1 upgrades passed on macOS x64 and Linux arm64. macOS arm64 failed live bootstrap with GitHub release API HTTP 403 and skipped the subsequent upgrade check; the run overall failed. Rust toolchain isolation succeeded on Linux arm64. The release-mode session harness configuration is a later change, not covered by this run.
+
+Earlier run [46107503244](https://github.com/anquocviet/agent-foundry/actions/runs/46107503244), commit `e6519458713abaa4bf15607349f38f940a03a83e`, also passed live stable bootstrap and the opt-in production v0.1.0→v0.1.1 upgrade on native macOS arm64 (job 140863437553). This is platform upgrade evidence for that commit, not a passing run for the later activation-schema changes.
+
 ## Continuation checkpoint
 
 See `docs/milestone-evidence.md`. AF-001/002 remain partial: architectural ports, complete schema/model integration and native toolchain proof are not done. Transaction journals/backups now use content-addressed images; large saved install plans remain inline and bounded. No dependency milestone is declared completed from partial code.

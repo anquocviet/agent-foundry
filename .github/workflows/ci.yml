@@ -235,6 +235,18 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: python tests/acceptance/crashes.py ${{ matrix.fault_binary }}
 
+      - name: Native migration and recovery acceptance
+        shell: bash
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/repository-harness"
+          git clone --no-checkout https://github.com/hoangnb24/repository-harness.git "$upstream"
+          git -C "$upstream" cat-file -e 485fd4062be1c71b27c1c9e5585ac4cd2faa7e06^{commit}
+          git -C "$upstream" cat-file -e e765792b635b4d5e3e5fc0578f82f9ca5dea2681^{commit}
+          python -B tests/acceptance/migration.py '${{ matrix.binary }}' "$upstream" '${{ matrix.fault_binary }}'
+
       - name: Native macOS and Linux arm64 conflict-session crash matrix
         if: runner.os == 'macOS' || matrix.target == 'aarch64-unknown-linux-gnu'
         shell: bash
@@ -242,7 +254,7 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
-          cargo build --locked --example check-session
+          cargo build --release --locked --example check-session
           candidate="$RUNNER_TEMP/session-candidate"
           python - "$candidate" <<'PY'
           import hashlib, json, shutil, sys
@@ -267,7 +279,7 @@ jobs:
           manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
           PY
           cargo build --release --locked --manifest-path "$candidate/Cargo.toml"
-          python tests/acceptance/session_matrix.py target/debug/examples/check-session \
+          python tests/acceptance/session_matrix.py target/release/examples/check-session \
             "${{ matrix.binary }}" "$candidate/target/release/agentfoundry" "${{ matrix.fault_binary }}"
 
       - name: Native macOS and Linux arm64 live stable bootstrap
