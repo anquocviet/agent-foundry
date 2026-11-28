@@ -3,6 +3,8 @@
 import hashlib
 import json
 from pathlib import Path
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -96,7 +98,6 @@ with tempfile.TemporaryDirectory(prefix='af-migration-') as temp:
         divergent = root / 'docs/WORKFLOW.md'
         original_workflow = divergent.read_bytes()
         divergent.write_bytes(original_workflow + b'\nConsumer workflow note.\n')
-        import os
         missing_git_env = os.environ.copy()
         missing_git_env['PATH'] = str(base / 'unavailable-programs')
         before_missing_git = snapshot(root)
@@ -115,26 +116,51 @@ with tempfile.TemporaryDirectory(prefix='af-migration-') as temp:
         divergent.write_bytes(original_workflow)
         plan = base / f'plan-{index}.json'
         run(root, '--dry-run', '--plan-out', str(plan))
-        if fault_binary and not index:
-            import os
+        if fault_binary:
+            checkpoints = ('before-journal', 'prepared-durable', 'journal-durable',
+                           'applied:AGENTS.md', 'applied:.agentfoundry/state/manifest.json',
+                           'core-committed-durable', 'before-complete')
+            for checkpoint in checkpoints:
+                crash_root = base / f'crash-{index}-{checkpoints.index(checkpoint)}'
+                shutil.copytree(root, crash_root)
+                env = os.environ.copy()
+                env['AGENTFOUNDRY_TEST_CRASH'] = checkpoint
+                crashed = subprocess.run([str(fault_binary), 'migrate', 'harness', '--directory', str(crash_root), '--apply', '--json'], env=env, capture_output=True, text=True)
+                assert crashed.returncode == 86, (checkpoint, crashed.returncode, crashed.stdout, crashed.stderr)
+                committed = checkpoint in ('applied:.agentfoundry/state/manifest.json', 'core-committed-durable', 'before-complete')
+                if committed:
+                    with (crash_root / 'AGENTS.md').open('ab') as file:
+                        file.write(b'\npost-commit consumer edit\n')
+                if checkpoint == 'applied:AGENTS.md':
+                    interrupted = snapshot(crash_root)
+                    run(crash_root, '--dry-run', code=8)
+                    assert snapshot(crash_root) == interrupted
+                    env['AGENTFOUNDRY_TEST_CRASH'] = 'rollback:AGENTS.md'
+                    rollback = subprocess.run([str(fault_binary), 'recover', '--directory', str(crash_root), '--json'], env=env, capture_output=True, text=True)
+                    assert rollback.returncode == 86, (rollback.stdout, rollback.stderr)
+                recovered = subprocess.run([str(fault_binary), 'recover', '--directory', str(crash_root), '--json'], capture_output=True, text=True)
+                assert recovered.returncode == 0, (checkpoint, recovered.stdout, recovered.stderr)
+                expected = 'not_needed' if checkpoint == 'before-journal' else 'committed' if committed else 'rolled_back'
+                assert json.loads(recovered.stdout)['data']['recovery'] == expected
+                again = subprocess.run([str(fault_binary), 'recover', '--directory', str(crash_root), '--json'], capture_output=True, text=True)
+                assert again.returncode == 0 and json.loads(again.stdout)['data']['recovery'] == 'not_needed'
+                assert not (crash_root / '.agentfoundry/runtime/transaction.json').exists()
+                for path, data in before.items():
+                    if not committed or path not in ('AGENTS.md', 'CLAUDE.md'):
+                        assert (crash_root / path).read_bytes() == data, (checkpoint, path)
+                if committed:
+                    assert (crash_root / 'AGENTS.md').read_bytes().endswith(b'post-commit consumer edit\n')
+                    assert (crash_root / '.agentfoundry/state/manifest.json').is_file()
+                else:
+                    assert not (crash_root / '.agentfoundry/state/manifest.json').exists()
+                    run(crash_root, '--apply')
+                    assert (crash_root / '.agentfoundry/state/manifest.json').is_file()
+            retry_root = base / f'automatic-migration-recovery-{index}'
+            shutil.copytree(root, retry_root)
             env = os.environ.copy()
             env['AGENTFOUNDRY_TEST_CRASH'] = 'applied:AGENTS.md'
-            import shutil
-            retry_root = base / 'automatic-migration-recovery'
-            shutil.copytree(root, retry_root)
-            crashed = subprocess.run([str(fault_binary), 'migrate', 'harness', '--directory', str(root), '--apply', '--json'], env=env, capture_output=True, text=True)
+            crashed = subprocess.run([str(fault_binary), 'migrate', 'harness', '--directory', str(retry_root), '--apply', '--json'], env=env, capture_output=True, text=True)
             assert crashed.returncode == 86, (crashed.stdout, crashed.stderr)
-            recovered = subprocess.run([str(fault_binary), 'recover', '--directory', str(root), '--json'], capture_output=True, text=True)
-            assert recovered.returncode == 0, (recovered.stdout, recovered.stderr)
-            assert json.loads(recovered.stdout)['mutation'] == 'rolled_back'
-            for path, data in before.items():
-                assert (root / path).read_bytes() == data, path
-            assert not (root / '.agentfoundry/state/manifest.json').exists()
-            crashed_retry = subprocess.run([str(fault_binary), 'migrate', 'harness', '--directory', str(retry_root), '--apply', '--json'], env=env, capture_output=True, text=True)
-            assert crashed_retry.returncode == 86, (crashed_retry.stdout, crashed_retry.stderr)
-            interrupted_snapshot = snapshot(retry_root)
-            run(retry_root, '--dry-run', code=8)
-            assert snapshot(retry_root) == interrupted_snapshot
             run(retry_root, '--apply')
             assert not (retry_root / '.agentfoundry/runtime/transaction.json').exists()
             assert (retry_root / '.agentfoundry/state/manifest.json').is_file()

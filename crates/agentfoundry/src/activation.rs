@@ -29,7 +29,7 @@ pub fn pending(root: &Path) -> Result<bool> {
 fn image(id: &str, hash: &str) -> String {
     format!(".agentfoundry/backups/{id}/objects/{hash}")
 }
-fn load(root: &Path) -> Result<(Record, Vec<u8>)> {
+fn load_record(root: &Path) -> Result<Record> {
     let bytes = fs::read(root, RECORD, fs::CONTROL_LIMIT)?
         .ok_or_else(|| Failure::new("INVALID_STATE", "activation record missing"))?;
     let r: Record = serde_json::from_slice(&bytes)?;
@@ -54,6 +54,9 @@ fn load(root: &Path) -> Result<(Record, Vec<u8>)> {
     ] {
         crate::domain::validate_digest(hash).map_err(|e| Failure::new("RECOVERY_BLOCKED", e))?;
     }
+    Ok(r)
+}
+fn load_candidate(root: &Path, r: &Record) -> Result<Vec<u8>> {
     let candidate = fs::read(
         root,
         &image(&r.id, &r.target.binary_digest),
@@ -85,10 +88,11 @@ fn load(root: &Path) -> Result<(Record, Vec<u8>)> {
             "release evidence missing",
         ));
     }
-    Ok((r, candidate))
+    Ok(candidate)
 }
 pub fn retained_candidate_digest(root: &Path) -> Result<String> {
-    let (record, _) = load(root)?;
+    let record = load_record(root)?;
+    load_candidate(root, &record)?;
     Ok(record.target.binary_digest)
 }
 pub fn apply(root: &Path, prepared: &PreparedUpdate) -> Result<()> {
@@ -189,7 +193,7 @@ pub(crate) fn recover_locked(root: &Path, dry: bool) -> Result<serde_json::Value
             "recover transaction before activation",
         ));
     }
-    let (record, candidate) = load(root)?;
+    let record = load_record(root)?;
     let state = fs::read(root, crate::STATE, fs::CONTROL_LIMIT)?
         .ok_or_else(|| Failure::new("RECOVERY_BLOCKED", "installed state missing"))?;
     let hash = fs::digest(&state);
@@ -222,6 +226,7 @@ pub(crate) fn recover_locked(root: &Path, dry: bool) -> Result<serde_json::Value
             "installed state differs from activation witness",
         ));
     }
+    let candidate = load_candidate(root, &record)?;
     let installed = crate::models::InstallationState::parse(&state)?;
     if installed.binary_digest != record.target.binary_digest
         || installed.version != record.target.version
@@ -292,7 +297,7 @@ pub(crate) fn recover_locked(root: &Path, dry: bool) -> Result<serde_json::Value
                 Operation {
                     target: crate::STATE.into(),
                     before: Some(state.clone()),
-                    after: Some(state),
+                    after: Some(state.clone()),
                     mode: crate::existing_mode(root, crate::STATE, 0o644)?,
                 },
             ],
@@ -326,6 +331,23 @@ pub(crate) fn recover_locked(root: &Path, dry: bool) -> Result<serde_json::Value
             return Err(Failure::new(
                 "RECOVERY_BLOCKED",
                 "activated executable identity mismatch",
+            ));
+        }
+        if fs::read(root, crate::STATE, fs::CONTROL_LIMIT)?.as_deref() != Some(state.as_slice())
+            || fs::read(root, binary_path(), 128 * 1024 * 1024)?
+                .as_ref()
+                .is_none_or(|bytes| fs::digest(bytes) != record.target.binary_digest)
+        {
+            return Err(Failure::new(
+                "RECOVERY_BLOCKED",
+                "activation witness changed during executable verification",
+            ));
+        }
+        #[cfg(unix)]
+        if crate::existing_mode(root, binary_path(), 0)? != record.mode {
+            return Err(Failure::new(
+                "RECOVERY_BLOCKED",
+                "executable permission changed during verification",
             ));
         }
         fs::remove(root, RECORD)?;

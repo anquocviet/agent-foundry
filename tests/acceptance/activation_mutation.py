@@ -62,10 +62,23 @@ with tempfile.TemporaryDirectory(prefix='af-activation-mutation-') as directory:
         assert result.returncode != 0 and response['mutation'] == 'none', response
         assert record_path.exists() and target.read_bytes() == old_binary
         target.chmod(0o755)
+    # Pre-activation cancellation does not require a retained candidate.
+    object_path.unlink()
+    result, response = run('recover', '--dry-run')
+    assert result.returncode == 0 and record_path.exists(), response
     result, response = run('recover')
     assert result.returncode == 0 and not record_path.exists(), response
+    object_path.write_bytes(candidate)
     state_path.write_bytes(target_state)
     record_path.write_text(json.dumps(record))
+    # Once state is committed, missing candidate bytes must retain all evidence.
+    object_path.unlink()
+    for args in (('recover', '--dry-run'), ('recover',)):
+        result, response = run(*args)
+        assert result.returncode != 0 and response['mutation'] == 'none', response
+        assert record_path.exists() and target.read_bytes() == old_binary
+        assert state_path.read_bytes() == target_state and not object_path.exists()
+    object_path.write_bytes(candidate)
     target.unlink()
     result, response = run('recover')
     assert result.returncode != 0 and response['mutation'] == 'applied', response
@@ -73,4 +86,23 @@ with tempfile.TemporaryDirectory(prefix='af-activation-mutation-') as directory:
     result, response = run('recover')
     assert result.returncode != 0 and response['mutation'] == 'none', response
     assert target.read_bytes() == candidate and record_path.exists()
+    if sys.platform != 'win32':
+        # Identity output must not clear the witness if the executable changes.
+        identity = json.dumps({'data': {'version': state['version'], 'source': state['source'],
+                                        'payload_digest': state['payload_digest']}})
+        candidate = ("#!/bin/sh\nprintf 'foreign' > \"$0.tmp\"\nmv \"$0.tmp\" \"$0\"\nprintf '%s\\n' '" + identity + "'\n").encode()
+        candidate_hash = digest(candidate)
+        state['binary_digest'] = candidate_hash
+        target_state = json.dumps(state, indent=2).encode()
+        state_path.write_bytes(target_state)
+        object_path = object_path.parent / candidate_hash
+        object_path.write_bytes(candidate)
+        record['after_state'] = digest(target_state)
+        record['target']['binary_digest'] = candidate_hash
+        record_path.write_text(json.dumps(record))
+        target.write_bytes(candidate)
+        target.chmod(0o755)
+        result, response = run('recover')
+        assert result.returncode != 0 and response['mutation'] == 'none', response
+        assert target.read_bytes() == b'foreign' and record_path.exists()
 print('activation identity failure reports applied only when binary was replaced')

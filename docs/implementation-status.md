@@ -68,6 +68,12 @@ Hardening/limitations to accept or close explicitly (not evidence for the rows a
 
 No item above is completed by this documentation review. Historical checkpoint sections below remain as recorded.
 
+## Current local continuation
+
+The conflict-session acceptance harness includes absent baseline-object creation and synthetic stable metadata identity/asset/protocol tampering in preview and apply. These checks cover consistency, not authentication of release metadata or arbitrary coordinated edits. Migration acceptance covers additional precommit, postcommit and interrupted-recovery checkpoints on both pinned baselines. Activation cancellation permits a missing retained candidate only before commit and rechecks state and executable witnesses after the identity probe. Native platform, published provenance, and the remaining release gates above still require independent evidence.
+
+The native CI workflow prepares an opt-in `workflow_dispatch` live production v0.1.0→v0.1.1 upgrade check on macOS x64/arm64 and Linux arm64, with pinned baseline and expected activation digests. This is workflow configuration, not a native result; the opt-in check requires the production latest pointer to remain v0.1.1 and fails if it changes. Regular push and pull-request CI do not run this pinned upgrade check.
+
 ## Continuation checkpoint
 
 See `docs/milestone-evidence.md`. AF-001/002 remain partial: architectural ports, complete schema/model integration and native toolchain proof are not done. Transaction journals/backups now use content-addressed images; large saved install plans remain inline and bounded. No dependency milestone is declared completed from partial code.

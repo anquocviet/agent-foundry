@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      published_upgrade:
+        description: Run live v0.1.0 to v0.1.1 upgrade proof (latest must be v0.1.1)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +33,8 @@ jobs:
             binary: target/release/agentfoundry
             packaged: agentfoundry-x86_64-apple-darwin
             fault_binary: target/fault-injection/debug/agentfoundry
+            baseline_sha256: 32bbe29dc6f2649786db8b964bbf249affbed0aaa5a0dbfbb2f959c6d3a14d98
+            upgrade_sha256: c4243074309968a890b3ff2b7a4e96a110a860d4201f5512784c5d0847a5ff9e
           - name: macOS arm64
             os: macos-15
             target: aarch64-apple-darwin
@@ -36,6 +43,8 @@ jobs:
             binary: target/release/agentfoundry
             packaged: agentfoundry-aarch64-apple-darwin
             fault_binary: target/fault-injection/debug/agentfoundry
+            baseline_sha256: d10a02b40e99617fd0b8de57c64dc6ccef8a5499e89c121f489f2b3621bd7700
+            upgrade_sha256: 25e38a6da3d934ee3d06f7cad16e37ebdfabc84400bae08f23c6d3b0f11e7f5a
           - name: Linux x64
             os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
@@ -52,6 +61,8 @@ jobs:
             binary: target/release/agentfoundry
             packaged: agentfoundry-aarch64-unknown-linux-gnu
             fault_binary: target/fault-injection/debug/agentfoundry
+            baseline_sha256: 186d43c9c90558c61f75a9df8ab0daadd485c08cea7d9987bcd810163f756fd9
+            upgrade_sha256: ad92f185b385b7f43647a30ca02340551945b0b89670535ce6495050f4413b7c
           - name: Windows x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -274,6 +285,28 @@ jobs:
           PY
           "$root/scripts/bin/agentfoundry" doctor --directory "$root" --json
           "$root/scripts/bin/agentfoundry" update --directory "$root" --json
+
+      - name: Native macOS and Linux arm64 published upgrade 0.1.0 to 0.1.1
+        if: github.event_name == 'workflow_dispatch' && inputs.published_upgrade && (runner.os == 'macOS' || matrix.target == 'aarch64-unknown-linux-gnu')
+        shell: bash
+        env:
+          TMPDIR: ${{ runner.temp }}
+          TARGET: ${{ matrix.target }}
+          BASELINE_SHA256: ${{ matrix.baseline_sha256 }}
+          UPGRADE_SHA256: ${{ matrix.upgrade_sha256 }}
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/agentfoundry-v0.1.0"
+          curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+            --connect-timeout 30 --max-time 180 \
+            "https://github.com/anquocviet/agent-foundry/releases/download/v0.1.0/agentfoundry-$TARGET" -o "$baseline"
+          python - "$baseline" "$BASELINE_SHA256" <<'PY'
+          import hashlib, sys
+          from pathlib import Path
+          assert hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest() == sys.argv[2], 'baseline digest mismatch'
+          PY
+          chmod +x "$baseline"
+          python -B tests/acceptance/published_upgrade.py "$baseline" 0.1.1 "$UPGRADE_SHA256"
 
       - name: Acceptance smoke - interactive.py (POSIX)
         if: runner.os != 'Windows'

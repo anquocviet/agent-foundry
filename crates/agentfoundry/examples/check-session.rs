@@ -127,6 +127,18 @@ fn main() {
     let before = std::fs::read(root.join(".agentfoundry/state/manifest.json")).unwrap();
     let prepared = prepare();
     assert_eq!(prepared.conflicts.len(), 1);
+    let absent_object = prepared
+        .plan
+        .operations
+        .iter()
+        .find(|op| {
+            op.target.starts_with(".agentfoundry/state/objects/")
+                && op.before.is_none()
+                && op.after.is_some()
+        })
+        .expect("changed incoming baseline must have an absent object")
+        .target
+        .clone();
     let report = session::stage(&root, &prepared).unwrap();
     let status = run(&args[1], "status", &[]);
     assert_eq!(status["data"]["resolution_pending"], true);
@@ -218,6 +230,76 @@ fn main() {
             .collect::<std::collections::BTreeMap<_, _>>()
     };
     assert_eq!(retained(snapshot(&root)), retained(before_abort));
+    // Exercise stable session evidence without claiming release authenticity: the
+    // synthetic metadata is locally constructed, not a published release.
+    let mut stable = prepare();
+    stable.target.source = "a".repeat(40);
+    let state_op = stable
+        .plan
+        .operations
+        .iter_mut()
+        .find(|op| op.target == ".agentfoundry/state/manifest.json")
+        .unwrap();
+    let mut next: serde_json::Value =
+        serde_json::from_slice(state_op.after.as_ref().unwrap()).unwrap();
+    next["source"] = serde_json::json!(stable.target.source);
+    state_op.after = Some(serde_json::to_vec_pretty(&next).unwrap());
+    let candidate = std::fs::read(&args[1]).unwrap();
+    stable.release = Some(agentfoundry::release::ReleaseMetadata {
+        schema: "agentfoundry.release/v1".into(),
+        version: stable.target.version.clone(),
+        tag: format!("v{}", stable.target.version),
+        source_commit: stable.target.source.clone(),
+        payload_digest: stable.target.payload_digest.clone(),
+        state_schema_min: 1,
+        state_schema_max: 1,
+        handoff_protocol: 1,
+        assets: agentfoundry::release::PLATFORMS
+            .iter()
+            .map(|platform| {
+                let name = format!("agentfoundry-{platform}");
+                agentfoundry::release::Asset {
+                    platform: (*platform).into(),
+                    checksum_name: format!("{name}.sha256"),
+                    name,
+                    size: candidate.len() as u64,
+                    sha256: fs::digest(&candidate),
+                }
+            })
+            .collect(),
+    });
+    session::stage(&root, &stable).unwrap();
+    session::status(&root).unwrap();
+    let stable_control = std::fs::read(&control).unwrap();
+    for change in ["missing", "source", "payload", "asset", "protocol"] {
+        let mut value: serde_json::Value = serde_json::from_slice(&stable_control).unwrap();
+        match change {
+            "missing" => value["release"] = serde_json::Value::Null,
+            "source" => value["release"]["source_commit"] = serde_json::json!("b".repeat(40)),
+            "payload" => value["release"]["payload_digest"] = serde_json::json!("0".repeat(64)),
+            "asset" => {
+                let platform = agentfoundry::candidate::current_platform().unwrap();
+                let asset = value["release"]["assets"]
+                    .as_array_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|asset| asset["platform"] == platform)
+                    .unwrap();
+                asset["sha256"] = serde_json::json!("0".repeat(64));
+            }
+            _ => value["release"]["handoff_protocol"] = serde_json::json!(2),
+        }
+        std::fs::write(&control, serde_json::to_vec(&value).unwrap()).unwrap();
+        for dry in [true, false] {
+            let before = snapshot(&root);
+            let error = session::resume(&root, dry).unwrap_err();
+            assert_eq!(error.code, "INTEGRITY_FAILURE", "{change}");
+            assert_eq!(error.mutation, "none", "{change}");
+            assert_eq!(snapshot(&root), before, "{change} changed evidence");
+        }
+    }
+    std::fs::write(&control, stable_control).unwrap();
+    session::abort(&root).unwrap();
     let prepared = prepare();
     session::stage(&root, &prepared).unwrap();
     let resolved = report["conflicts"][0]["resolved"].as_str().unwrap();
@@ -270,6 +352,11 @@ fn main() {
         refused("WORKSPACE_DRIFT");
         std::fs::write(path, bytes).unwrap();
     }
+    let absent_path = root.join(&absent_object);
+    assert!(!absent_path.exists());
+    std::fs::write(&absent_path, b"unexpected object").unwrap();
+    refused("WORKSPACE_DRIFT");
+    std::fs::remove_file(absent_path).unwrap();
     let preview_before = snapshot(&root);
     run(&args[1], "update", &["--continue", "--dry-run"]);
     assert_eq!(

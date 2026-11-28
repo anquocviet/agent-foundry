@@ -157,4 +157,55 @@ for checkpoint in checkpoints:
         again = subprocess.run([str(binary), 'recover', '--directory', str(root), '--json'], capture_output=True, text=True)
         assert again.returncode == 0 and json.loads(again.stdout)['data']['recovery'] == 'not_needed'
         assert sentinel.read_bytes() == b'outside owner'
+for checkpoint in ('journal-durable', 'applied:docs/agentfoundry/WORKFLOW.md'):
+    with tempfile.TemporaryDirectory(prefix='agentfoundry-override-crash-') as directory:
+        root = Path(directory) / 'consumer'
+        sentinel = Path(directory) / 'outside'
+        sentinel.write_bytes(b'outside owner')
+        command = [str(binary), 'install', '--directory', str(root), '--json']
+        subprocess.run(command, capture_output=True, text=True, check=True)
+        workflow = root / 'docs/agentfoundry/WORKFLOW.md'
+        workflow.write_bytes(workflow.read_bytes() + b'\nconsumer edit\n')
+        tracked = [workflow, root / 'AGENTS.md', root / '.agentfoundry/state/manifest.json']
+        before = {path: path.read_bytes() for path in tracked}
+        env = {**os.environ, 'AGENTFOUNDRY_TEST_CRASH': checkpoint}
+        interrupted = subprocess.run([*command, '--override'], env=env, capture_output=True, text=True)
+        assert interrupted.returncode == 86, (checkpoint, interrupted.stdout, interrupted.stderr)
+        journal = root / '.agentfoundry/runtime/transaction.json'
+        assert journal.is_file()
+        recover = [str(binary), 'recover', '--directory', str(root), '--json']
+        result = subprocess.run(recover, capture_output=True, text=True, check=True)
+        assert json.loads(result.stdout)['data']['recovery'] == 'rolled_back'
+        assert {path: path.read_bytes() for path in tracked} == before
+        again = subprocess.run(recover, capture_output=True, text=True, check=True)
+        assert json.loads(again.stdout)['data']['recovery'] == 'not_needed'
+        assert sentinel.read_bytes() == b'outside owner'
+        result = subprocess.run([*command, '--override'], capture_output=True, text=True, check=True)
+        assert json.loads(result.stdout)['code'] == 'OK'
+with tempfile.TemporaryDirectory(prefix='agentfoundry-override-binary-') as directory:
+    root = Path(directory) / 'consumer'
+    baseline = Path(directory) / binary.name
+    baseline.write_bytes(binary.read_bytes() + b'agentfoundry-test-overlay')
+    baseline.chmod(0o755)
+    command = ['install', '--directory', str(root), '--json']
+    subprocess.run([str(baseline), *command], capture_output=True, text=True, check=True)
+    executable = root / ('scripts/bin/agentfoundry.exe' if sys.platform == 'win32' else 'scripts/bin/agentfoundry')
+    workflow = root / 'docs/agentfoundry/WORKFLOW.md'
+    workflow.write_bytes(workflow.read_bytes() + b'\nconsumer edit\n')
+    tracked = (executable, workflow, root / 'AGENTS.md', root / '.agentfoundry/state/manifest.json')
+    before = {path: path.read_bytes() for path in tracked}
+    assert before[executable] == baseline.read_bytes() and before[executable] != binary.read_bytes()
+    env = {**os.environ, 'AGENTFOUNDRY_TEST_CRASH': f'applied:{executable.relative_to(root).as_posix()}'}
+    interrupted = subprocess.run([str(binary), *command, '--override'], env=env, capture_output=True, text=True)
+    assert interrupted.returncode == 86, (interrupted.returncode, interrupted.stdout, interrupted.stderr)
+    assert executable.read_bytes() == binary.read_bytes()
+    assert (root / '.agentfoundry/runtime/transaction.json').is_file()
+    recover = [str(binary), 'recover', '--directory', str(root), '--json']
+    result = subprocess.run(recover, capture_output=True, text=True, check=True)
+    assert json.loads(result.stdout)['data']['recovery'] == 'rolled_back'
+    assert {path: path.read_bytes() for path in tracked} == before
+    again = subprocess.run(recover, capture_output=True, text=True, check=True)
+    assert json.loads(again.stdout)['data']['recovery'] == 'not_needed'
+print('override executable crash/recover restored baseline and consumer files')
+print('override crash/recover: journal and managed-file rollback passed')
 print(f'public crash/recover: {len(checkpoints)} process checkpoints passed, with rollback, commit, evidence retention and outside sentinel checks')
