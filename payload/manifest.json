@@ -2,6 +2,14 @@
   "schema": "agentfoundry.distribution/v1",
   "entries": [
     {
+      "logical_id": "THIRD_PARTY_NOTICES.md",
+      "source": "THIRD_PARTY_NOTICES.md",
+      "target": "docs/agentfoundry/THIRD_PARTY_NOTICES.md",
+      "ownership": "managed_file",
+      "mode": 420,
+      "sha256": "e0b772a61142c882f522ec008d2850387e8c33170791cc44918fe5910eb91943"
+    },
+    {
       "logical_id": ".agents/skills/audit-onboarding-proposal/SKILL.md",
       "source": "payload/core/.agents/skills/agentfoundry-audit/SKILL.md",
       "target": ".agents/skills/agentfoundry-audit/SKILL.md",

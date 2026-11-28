@@ -16,6 +16,9 @@ with tempfile.TemporaryDirectory(prefix='agentfoundry-payload-') as directory:
     root = Path(directory)
     subprocess.run([str(binary), 'install', '--directory', str(root), '--with-engineering-wisdom', '--claude', '--json'], check=True, capture_output=True)
     entries = {e['target']: e for e in manifest['entries']}
+    notice = root / 'docs/agentfoundry/THIRD_PARTY_NOTICES.md'
+    assert notice.read_bytes() == (source / 'THIRD_PARTY_NOTICES.md').read_bytes()
+    assert b'Copyright (c) 2025 Hoang Nguyen' in notice.read_bytes()
     installed = json.loads((root / '.agentfoundry/state/manifest.json').read_text())
     assert {entry['target'] for entry in installed['entries']} == set(entries)
     actual = {path.relative_to(root).as_posix() for path in root.rglob('*') if path.is_file()

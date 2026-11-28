@@ -1,3 +1,4 @@
 # Payload digests are computed over exact LF bytes on every platform.
 /payload/** text eol=lf
+/THIRD_PARTY_NOTICES.md text eol=lf
 /scripts/agentfoundry.ps1 text eol=lf
