@@ -74,6 +74,12 @@ The conflict-session acceptance harness includes absent baseline-object creation
 
 The native CI workflow prepares an opt-in `workflow_dispatch` live production v0.1.0→v0.1.1 upgrade check on macOS x64/arm64 and Linux arm64, with pinned baseline and expected activation digests. This is workflow configuration, not a native result; the opt-in check requires the production latest pointer to remain v0.1.1 and fails if it changes. Regular push and pull-request CI do not run this pinned upgrade check.
 
+CI run [46107503244](https://github.com/anquocviet/agent-foundry/actions/runs/46107503244), commit `e6519458713abaa4bf15607349f38f940a03a83e`: the retained `gh run watch` log records native Windows x64 job 140863437291 passing, including `crashes.py`'s byte-distinct same-payload executable override rollback, activation mutation and Windows launcher/replacement checks. This proves the covered process-exit checkpoints, not power loss or all Windows replacement failures. Linux arm64 failed at Rust toolchain setup; final macOS results were unavailable when GitHub API connections timed out.
+
+Activation recovery records now have a versioned JSON schema and the public recovery fixture validates its record against it, including malformed release references. Schema validation does not replace runtime root identity, candidate integrity or release semantic checks; AF-002 remains open.
+
+Run 46107503244 finished with macOS x64/arm64, Linux x64 and Windows x64 jobs successful. Linux arm64 failed before tests because the runner's partially installed Rust 1.90 toolchain conflicted on `bin/cargo-clippy`; the workflow now isolates its rustup home for a fresh installation. This configuration change awaits a native run.
+
 ## Continuation checkpoint
 
 See `docs/milestone-evidence.md`. AF-001/002 remain partial: architectural ports, complete schema/model integration and native toolchain proof are not done. Transaction journals/backups now use content-addressed images; large saved install plans remain inline and bounded. No dependency milestone is declared completed from partial code.

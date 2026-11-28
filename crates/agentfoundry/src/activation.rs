@@ -17,6 +17,7 @@ struct Record {
     after_state: String,
     before_binary: String,
     target: crate::update::CandidateIdentity,
+    #[serde(deserialize_with = "serde::Deserialize::deserialize")]
     release: Option<crate::release::ReleaseMetadata>,
     mode: u32,
 }

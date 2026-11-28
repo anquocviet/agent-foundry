@@ -38,7 +38,29 @@ with tempfile.TemporaryDirectory(prefix='af-activation-mutation-') as directory:
               'target': {'version': state['version'], 'source': state['source'],
                          'payload_digest': state['payload_digest'], 'binary_digest': candidate_hash},
               'release': None, 'mode': 0o755}
+    if '--validate-schema' in sys.argv:
+        from jsonschema import Draft202012Validator
+        from referencing import Registry, Resource
+        schemas = Path(__file__).resolve().parents[2] / 'schemas'
+        release_schema = json.loads((schemas / 'release.json').read_text())
+        registry = Registry().with_resource('release.json', Resource.from_contents(release_schema))
+        validator = Draft202012Validator(json.loads((schemas / 'activation.json').read_text()), registry=registry)
+        validator.validate(record)
+        for key, value in [('schema', 'agentfoundry.activation/v2'), ('id', '../escape'),
+                           ('before_binary', 'invalid'), ('mode', 512), ('release', {})]:
+            invalid = {**record, key: value}
+            assert not validator.is_valid(invalid), key
+        assert not validator.is_valid({**record, 'unknown': True})
     record_path = root / '.agentfoundry/runtime/activation.json'
+    record_path.write_text(json.dumps(record))
+    omitted = dict(record)
+    del omitted['release']
+    record_path.write_text(json.dumps(omitted))
+    rejected, response = run('recover')
+    assert rejected.returncode != 0 and response['mutation'] == 'none', response
+    assert json.loads(record_path.read_text()) == omitted
+    if '--validate-schema' in sys.argv:
+        assert not validator.is_valid(omitted)
     record_path.write_text(json.dumps(record))
     # A pre-commit cancellation must not discard the only recovery witness if
     # the installed executable is absent, foreign, or has changed permissions.
