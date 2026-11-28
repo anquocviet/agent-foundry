@@ -281,6 +281,9 @@ jobs:
           cargo build --release --locked --manifest-path "$candidate/Cargo.toml"
           python tests/acceptance/session_matrix.py target/release/examples/check-session \
             "${{ matrix.binary }}" "$candidate/target/release/agentfoundry" "${{ matrix.fault_binary }}"
+          cargo build --release --locked --features fault-injection --example check-session --target-dir target/fault-injection
+          python -B tests/acceptance/clean_activation.py target/fault-injection/release/examples/check-session \
+            "${{ matrix.binary }}" "$candidate/target/release/agentfoundry"
 
       - name: Native macOS and Linux arm64 live stable bootstrap
         if: runner.os == 'macOS' || matrix.target == 'aarch64-unknown-linux-gnu'
